@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}世界详情 - StoryWorld 管理后台{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="mb-0">🌍 世界《{{ world.title }}》</h4>
+  <div>
+    <a class="btn btn-outline-secondary btn-sm" href="/admin/worlds">返回列表</a>
+    <form method="post" action="/admin/worlds/{{ world.id }}/tick" class="d-inline" onsubmit="return confirm('确定强制推进一天吗？');">
+      <button class="btn btn-sm btn-outline-warning">⏩ 推进一天</button>
+    </form>
+    <form method="post" action="/admin/worlds/{{ world.id }}/abort" class="d-inline" onsubmit="return confirm('确定中止该世界吗？此操作不可撤销！');">
+      <button class="btn btn-sm btn-outline-danger">⛔ 中止世界</button>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <div class="text-muted small">剧本</div>
+        <div>{{ world.script.title if world.script else '-' }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">状态</div>
+        <span class="badge text-bg-{{ WORLD_STATUS_COLORS.get(world.status, 'secondary') }}">{{ WORLD_STATUS_LABELS.get(world.status, world.status) }}</span>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">进度</div>
+        <div>第 {{ world.day }} 天 / 共 {{ total_days }} 天</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">群 chat_id</div>
+        <div>{{ world.chat_id or '-' }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">房主</div>
+        <div>{{ owner_name }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">创建时间</div>
+        <div>{{ world.created_at | fmt_dt }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">开始时间</div>
+        <div>{{ world.started_at | fmt_dt }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">上次推进</div>
+        <div>{{ world.last_tick_at | fmt_dt }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h5 class="mt-4">👥 玩家列表（{{ players | length }}）</h5>
+<table class="table table-striped table-hover bg-white shadow-sm">
+  <thead>
+    <tr><th>ID</th><th>角色名</th><th>角色定位</th><th>状态</th><th>生命</th><th>道具</th><th>加入时间</th></tr>
+  </thead>
+  <tbody>
+    {% for p in players %}
+    <tr>
+      <td>{{ p.id }}</td>
+      <td>{{ p.character_name }}</td>
+      <td>{{ p.character_role or '-' }}</td>
+      <td><span class="badge text-bg-{{ PLAYER_STATUS_COLORS.get(p.status, 'secondary') }}">{{ PLAYER_STATUS_LABELS.get(p.status, p.status) }}</span></td>
+      <td>{{ (p.private_state or {}).get('hp', '-') }}</td>
+      <td>{{ (p.private_state or {}).get('items', []) | join('、') or '无' }}</td>
+      <td class="text-nowrap">{{ p.created_at | fmt_dt }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="text-center text-muted py-3">暂无玩家</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h5 class="mt-4">📜 正典时间线（CanonEvent）</h5>
+<table class="table table-striped bg-white shadow-sm">
+  <thead>
+    <tr><th>#</th><th>天数</th><th>公开</th><th>内容</th><th>时间</th></tr>
+  </thead>
+  <tbody>
+    {% for e in events %}
+    <tr>
+      <td>{{ e.id }}</td>
+      <td>第 {{ e.day }} 天</td>
+      <td>{% if e.public %}✅{% else %}🔒{% endif %}</td>
+      <td>{{ e.content }}</td>
+      <td class="text-nowrap">{{ e.created_at | fmt_dt }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="text-center text-muted py-3">暂无正典事件</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h5 class="mt-4">🎬 最近个人场景（Scene）</h5>
+<table class="table table-striped bg-white shadow-sm">
+  <thead>
+    <tr><th>#</th><th>天数</th><th>玩家</th><th>剧情</th><th>建议行动</th></tr>
+  </thead>
+  <tbody>
+    {% for sc in scenes %}
+    <tr>
+      <td>{{ sc.id }}</td>
+      <td>第 {{ sc.day }} 天</td>
+      <td>{{ scene_player_names.get(sc.user_id, '玩家#' ~ sc.user_id) }}</td>
+      <td>{{ sc.narrative }}</td>
+      <td>{{ (sc.suggested_actions or []) | join(' / ') or '-' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="text-center text-muted py-3">暂无场景</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}仪表盘 - StoryWorld 管理后台{% endblock %}
+{% block content %}
+<h4 class="mb-4">📊 数据概览</h4>
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card text-bg-primary h-100"><div class="card-body">
+      <div class="stat-card num">{{ stats.total_scripts }}</div>
+      <div class="small opacity-75">剧本总数</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-bg-success h-100"><div class="card-body">
+      <div class="stat-card num">{{ stats.approved_scripts }}</div>
+      <div class="small opacity-75">已上架剧本</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-bg-warning h-100"><div class="card-body">
+      <div class="stat-card num">{{ stats.pending_scripts }}</div>
+      <div class="small opacity-75">待审核剧本</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-bg-info h-100"><div class="card-body">
+      <div class="stat-card num">{{ stats.total_worlds }}</div>
+      <div class="small opacity-75">世界总数</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-bg-success h-100"><div class="card-body">
+      <div class="stat-card num">{{ stats.running_worlds }}</div>
+      <div class="small opacity-75">进行中世界</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-bg-secondary h-100"><div class="card-body">
+      <div class="stat-card num">{{ stats.total_users }}</div>
+      <div class="small opacity-75">用户数</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-bg-dark h-100"><div class="card-body">
+      <div class="stat-card num">{{ stats.total_players }}</div>
+      <div class="small opacity-75">玩家角色数（WorldPlayer）</div>
+    </div></div>
+  </div>
+</div>
+
+<h4 class="mb-3">🌍 最近世界动态（CanonEvent）</h4>
+<table class="table table-striped table-hover bg-white shadow-sm">
+  <thead>
+    <tr><th>#</th><th>世界</th><th>天数</th><th>内容</th><th>时间</th></tr>
+  </thead>
+  <tbody>
+    {% for e in events %}
+    <tr>
+      <td>{{ e.id }}</td>
+      <td><a href="/admin/worlds/{{ e.world_id }}">{{ world_titles.get(e.world_id, '未知世界') }}</a></td>
+      <td>第 {{ e.day }} 天</td>
+      <td>{{ e.content }}</td>
+      <td class="text-nowrap">{{ e.created_at | fmt_dt }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="text-center text-muted py-4">暂无世界动态</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}剧本 JSON - StoryWorld 管理后台{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">📦 剧本《{{ script.title }}》content_json</h4>
+  <div>
+    <a class="btn btn-outline-secondary btn-sm" href="/admin/scripts/{{ script.id }}/edit">编辑</a>
+    <a class="btn btn-outline-secondary btn-sm" href="/admin/scripts">返回列表</a>
+  </div>
+</div>
+<pre class="json-pre">{{ pretty }}</pre>
+{% endblock %}

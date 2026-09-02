@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}审核剧本 - StoryWorld 管理后台{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">🔍 审核剧本《{{ script.title }}》</h4>
+  <a class="btn btn-outline-secondary btn-sm" href="/admin/scripts">返回列表</a>
+</div>
+
+<table class="table table-bordered bg-white shadow-sm" style="max-width: 720px;">
+  <tr><th class="w-25">ID</th><td>{{ script.id }}</td></tr>
+  <tr><th>标题</th><td>{{ script.title }}</td></tr>
+  <tr><th>题材</th><td>{{ script.genre or '-' }}</td></tr>
+  <tr><th>模式</th><td>{{ MODE_LABELS.get(script.mode, script.mode) }}</td></tr>
+  <tr><th>天数</th><td>{{ script.days }}</td></tr>
+  <tr><th>来源</th><td><span class="badge text-bg-secondary">{{ SOURCE_LABELS.get(script.source, script.source) }}</span></td></tr>
+  <tr><th>当前状态</th><td><span class="badge text-bg-warning">待审核</span></td></tr>
+</table>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <h6 class="text-muted">📄 用户原始草稿（raw_draft）</h6>
+    <pre class="json-pre">{{ raw_draft }}</pre>
+  </div>
+  <div class="col-md-6">
+    <h6 class="text-muted">🤖 AI 完善后的剧本（content_json）</h6>
+    <pre class="json-pre">{{ pretty }}</pre>
+  </div>
+</div>
+
+<div class="mt-4 d-flex gap-3 align-items-center flex-wrap">
+  <form method="post" action="/admin/scripts/{{ script.id }}/approve" onsubmit="return confirm('确定通过审核并上架该剧本吗？');">
+    <button class="btn btn-success">✅ 通过审核并上架</button>
+  </form>
+  <form method="post" action="/admin/scripts/{{ script.id }}/reject" class="d-flex gap-2 align-items-center" onsubmit="return confirm('确定驳回该剧本吗？');">
+    <input type="text" name="reason" class="form-control" placeholder="驳回理由（可选）" style="width: 260px;">
+    <button class="btn btn-danger">❌ 驳回并下架</button>
+  </form>
+</div>
+{% endblock %}

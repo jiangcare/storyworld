@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # ---------- 离线测试：无需 MySQL/Redis/API Key ----------
+  tests-offline:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+      - name: Compile check
+        run: python -m compileall -q app seed.py smoke_test.py run_bot.py run_admin.py run_web.py start_all.py
+      - name: Engine smoke test
+        run: python smoke_test.py
+      - name: Channel / GameFlow test
+        run: python tests/flow_test.py
+      - name: Web channel test
+        run: python tests/web_test.py
+
+  # ---------- MySQL 集成测试 ----------
+  tests-mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root123
+          MYSQL_DATABASE: storyworld
+          MYSQL_USER: storyworld
+          MYSQL_PASSWORD: storyworld123
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot123"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Seed database
+        run: |
+          cp .env.example .env
+          python seed.py
+      - name: MySQL integration test
+        run: python tests/mysql_test.py
+      - name: Admin panel test
+        run: python tests/admin_test.py

@@ -1,0 +1,80 @@
+"""DeepSeek LLM 客户端（OpenAI 兼容），统一返回结构化 JSON。"""
+from __future__ import annotations
+
+import json
+import logging
+
+from openai import AsyncOpenAI
+
+from ..config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class LLMError(Exception):
+    pass
+
+
+class LLMClient:
+    def __init__(self) -> None:
+        self._client = AsyncOpenAI(
+            api_key=settings.deepseek_api_key,
+            base_url=settings.deepseek_base_url,
+            timeout=settings.llm_timeout,
+        )
+
+    async def chat_json(
+        self,
+        system: str,
+        user: str,
+        *,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        retries: int = 2,
+    ) -> dict:
+        """调用模型并要求返回 JSON 对象（response_format=json_object）。"""
+        last_err: Exception | None = None
+        for attempt in range(retries + 1):
+            try:
+                resp = await self._client.chat.completions.create(
+                    model=settings.deepseek_model,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=temperature if temperature is not None else settings.llm_temperature,
+                    max_tokens=max_tokens or settings.llm_max_tokens,
+                )
+                raw = resp.choices[0].message.content or "{}"
+                data = self._extract_json(raw)
+                if not isinstance(data, dict):
+                    raise LLMError(f"模型返回非 JSON 对象: {raw[:200]}")
+                return data
+            except Exception as e:  # noqa: BLE001
+                last_err = e
+                logger.warning("LLM 调用失败(第%s次): %s", attempt + 1, e)
+        raise LLMError(f"LLM 调用最终失败: {last_err}")
+
+    @staticmethod
+    def _extract_json(raw: str) -> object:
+        raw = raw.strip()
+        # 容错：剥离可能包裹的 ```json ... ``` 代码块
+        if raw.startswith("```"):
+            lines = raw.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            raw = "\n".join(lines)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            # 尝试截取第一个 { 到最后一个 }
+            start, end = raw.find("{"), raw.rfind("}")
+            if start != -1 and end > start:
+                return json.loads(raw[start : end + 1])
+            raise
+
+
+client = LLMClient()

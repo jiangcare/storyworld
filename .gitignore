@@ -1,0 +1,9 @@
+.venv/
+.pip-cache/
+__pycache__/
+*.pyc
+.env
+.infra/
+*.log
+.DS_Store
+dump.rdb

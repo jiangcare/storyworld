@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ '新建剧本' if is_new else '编辑剧本' }} - StoryWorld 管理后台{% endblock %}
+{% block content %}
+<h4 class="mb-4">{{ '📝 新建剧本' if is_new else '✏️ 编辑剧本' }}{% if not is_new and script %}（ID: {{ script.id }}）{% endif %}</h4>
+
+{% if errors %}
+<div class="alert alert-danger">
+  <strong>提交失败：</strong>
+  <ul class="mb-0 mt-1">
+    {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<form method="post" action="{{ '/admin/scripts/new' if is_new else '/admin/scripts/' ~ script.id ~ '/edit' }}">
+  <div class="row g-3">
+    <div class="col-md-8">
+      <label class="form-label">标题 *</label>
+      <input type="text" name="title" class="form-control" value="{{ form.title or '' }}" required>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">题材</label>
+      <input type="text" name="genre" class="form-control" value="{{ form.genre or '' }}" placeholder="如：末日 / 悬疑 / 奇幻">
+    </div>
+    <div class="col-md-12">
+      <label class="form-label">简介</label>
+      <textarea name="description" class="form-control" rows="2">{{ form.description or '' }}</textarea>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">模式 *</label>
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="mode" id="mode_multi" value="multi" {% if form.mode != 'single' %}checked{% endif %}>
+        <label class="form-check-label" for="mode_multi">多人</label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="mode" id="mode_single" value="single" {% if form.mode == 'single' %}checked{% endif %}>
+        <label class="form-check-label" for="mode_single">单人</label>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">最少人数</label>
+      <input type="number" name="min_players" class="form-control" min="1" max="8" value="{{ form.min_players }}">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">最多人数</label>
+      <input type="number" name="max_players" class="form-control" min="1" max="8" value="{{ form.max_players }}">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">天数</label>
+      <input type="number" name="days" class="form-control" min="1" max="30" value="{{ form.days }}">
+    </div>
+    <div class="col-md-12">
+      <label class="form-label">剧本内容 JSON *</label>
+      <textarea name="content_json" class="form-control font-monospace" rows="22" spellcheck="false">{{ form.content_json }}</textarea>
+      <div class="form-text">
+        必须包含：<code>mode</code>（single/multi）、<code>days</code>（1-30）、<code>world.name</code>、
+        <code>player_cards</code>（单人 1 个 / 多人 2-8 个）、<code>chapters</code>（day_start~day_end 需覆盖全部天数）。
+        新建剧本保存后默认「已上架」。
+      </div>
+    </div>
+  </div>
+  <div class="mt-4">
+    <button type="submit" class="btn btn-primary">{{ '创建剧本' if is_new else '保存修改' }}</button>
+    <a class="btn btn-outline-secondary" href="/admin/scripts">返回列表</a>
+  </div>
+</form>
+{% endblock %}
