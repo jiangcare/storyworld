@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue)
-![CI](https://img.shields.io/github/actions/workflow/status/REPO_OWNER/storyworld/ci.yml?branch=main)
+![CI](https://img.shields.io/github/actions/workflow/status/jiangcare/storyworld/ci.yml?branch=main)
 
 基于多通道的多人/单人 AI 文字冒险游戏平台。玩家创建/加入一个小说世界、继承角色卡，每天固定时间由 AI 自动推进剧情（世界事件 + 个人场景），玩家用**自由文字**行动，AI 理解意图并在次日结算。支持官方剧本与**用户上传剧本（AI 协助完善 + 后台审核）**。
 
