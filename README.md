@@ -9,6 +9,7 @@
 基于多通道的多人/单人 AI 文字冒险游戏平台。玩家创建/加入一个小说世界、继承角色卡，每天固定时间由 AI 自动推进剧情（世界事件 + 个人场景），玩家用**自由文字**行动，AI 理解意图并在次日结算。支持官方剧本与**用户上传剧本（AI 协助完善 + 后台审核）**。
 
 - **AI 生成**：DeepSeek（OpenAI 兼容接口），默认模型 `deepseek-v4-flash`（可在 `.env` 修改）
+- **数据化玩法**：剧本预设（物品/能力/任务/主线）+ 运行时实体表（结构化提交）；**数值规则引擎**（JSON DSL：攻击/闪避/百分比加成/强化/抽奖/合成），每剧本规则可不同，AI 生成需过复杂度验收闸门
 - **存储**：MySQL（SQLAlchemy）+ Redis（会话/限流/锁）
 - **通道**：Telegram（aiogram 3 长轮询）+ Web（浏览器聊天室，含房间多人），本地部署无需域名/服务器
 - **后台**：FastAPI + Jinja2 + Bootstrap，管理剧本、审核上传、监控世界
@@ -28,13 +29,14 @@ storyworld/
 │  ├─ db.py              # SQLAlchemy + Redis 封装
 │  ├─ models.py          # 数据模型（含 platform 多平台用户维度）
 │  ├─ ai/                # DeepSeek 客户端 + 导演/编剧/意图/剧本完善
-│  ├─ engine/            # 剧本 DSL、世界服务、每日 tick（平台无关）
+│  ├─ engine/            # 剧本 DSL、世界服务、实体层、每日 tick（平台无关）
+│  ├─ rules/             # 数值规则引擎：JSON DSL + 白名单求值 + 复杂度验收
 │  ├─ game/              # GameFlow：平台无关的游戏交互流
 │  ├─ channel/           # 通道抽象：Action/ChannelEvent/Channel 基类 + Telegram 实现
 │  ├─ web/               # Web 通道：网页聊天界面（注册/房间/WebSocket）+ 前端页面
 │  ├─ bot/               # Telegram 运行时（接线通道 + 每日推送调度）
 │  └─ admin/             # FastAPI 后台管理系统
-├─ tests/                # 通道/游戏流/MySQL/后台 测试
+├─ tests/                # 引擎/通道/规则/实体/MySQL/后台 测试
 ├─ docs/                 # 剧本规范、通道适配器文档
 └─ .github/workflows/    # CI（离线 + MySQL 服务测试）
 ```
@@ -139,6 +141,8 @@ python -m venv .venv
 .venv\Scripts\python -X utf8 smoke_test.py            # 引擎全链路
 .venv\Scripts\python -X utf8 tests\flow_test.py        # 通道抽象 + 游戏流
 .venv\Scripts\python -X utf8 tests\web_test.py         # Web 通道（注册/房间/广播）
+.venv\Scripts\python -X utf8 tests\rules_test.py       # 规则引擎（表达式/DSL/复杂度验收）
+.venv\Scripts\python -X utf8 tests\entities_test.py    # 实体数据层（装备/能力/任务/上限）
 
 # MySQL 集成测试（需要真实 MySQL）
 .venv\Scripts\python seed.py
@@ -241,6 +245,12 @@ CI（GitHub Actions）会自动跑以上全部：离线测试 + MySQL 服务容�
 
 ## Roadmap（欢迎认领）
 
+已完成 ✅：
+- [x] 剧本数据化：预设（物品/能力/任务模板/主线节点）+ 运行时实体表（装备/能力/任务/flag，结构化提交）
+- [x] 数值规则引擎：JSON DSL（攻击/闪避/百分比加成/强化/抽奖/合成）+ 白名单安全求值 + 复杂度静态评估验收（AI 生成的规则包过闸门才生效，防资源耗尽）
+
+待办：
+- [ ] 玩法命令接入规则引擎：/draw 抽奖、/forge 强化、/synthesize 合成（`app.rules.engine` 已就绪）
 - [ ] QQ（OneBot/NapCat）通道适配器（建议独立仓库发布）
 - [ ] 钉钉 stream 通道
 - [ ] 恋人/兄弟专属双人剧本包 + 双人私聊世界模式

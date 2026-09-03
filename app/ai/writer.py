@@ -1,4 +1,6 @@
 """编剧层：玩家个人场景生成。"""
+from __future__ import annotations
+
 import json
 import logging
 
@@ -18,6 +20,7 @@ async def generate_scene(
     player_private_state: str,
     player_recent_history: str,
     player_today_actions: str,
+    player_data: str = "",
 ) -> dict:
     system = prompts.WRITER_SYSTEM_TEMPLATE.format(
         script_json=json.dumps(script, ensure_ascii=False),
@@ -32,6 +35,7 @@ async def generate_scene(
         player_private_state=player_private_state,
         player_recent_history=player_recent_history,
         player_today_actions=player_today_actions,
+        player_data=player_data,
     )
     data = await client.chat_json(system, user, max_tokens=2200)
     return _coerce(data)
@@ -44,7 +48,7 @@ def _coerce(data: dict) -> dict:
 
     def sl(key: str) -> list:
         v = data.get(key)
-        return [str(x) for x in v] if isinstance(v, list) else []
+        return v if isinstance(v, list) else []
 
     sc = data.get("state_changes") or {}
     if not isinstance(sc, dict):
@@ -52,6 +56,9 @@ def _coerce(data: dict) -> dict:
     notes = sc.get("notes") or {}
     if not isinstance(notes, dict):
         notes = {}
+    flags = sc.get("flag_set") or {}
+    if not isinstance(flags, dict):
+        flags = {}
 
     return {
         "narrative": s("narrative", "（你度过了平静的一天。）"),
@@ -60,7 +67,10 @@ def _coerce(data: dict) -> dict:
             "hp_delta": int(sc.get("hp_delta", 0) or 0),
             "items_added": sl("items_added"),
             "items_removed": sl("items_removed"),
-            "clues_added": sl("clues_added"),
+            "clues_added": [str(x) for x in sl("clues_added")],
+            "abilities_added": [str(x) for x in sl("abilities_added")],
+            "tasks_done": [str(x) for x in sl("tasks_done")],
+            "flag_set": {str(k): v for k, v in flags.items()},
             "notes": {str(k): str(v) for k, v in notes.items()},
         },
         "scene_ended": bool(data.get("scene_ended", False)),

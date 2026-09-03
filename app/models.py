@@ -90,6 +90,8 @@ class World(Base):
     push_hour: Mapped[int] = mapped_column(Integer, default=20)
     push_minute: Mapped[int] = mapped_column(Integer, default=0)
     last_tick_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    progress_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    # {mainline: {beat_index}, flags: {}, counters: {}, spawned: {tasks: n}}
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -206,3 +208,66 @@ class WebMessage(Base):
     text: Mapped[str] = mapped_column(Text)
     actions: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class PlayerItem(Base):
+    """玩家持有的物品/装备实例（运行时数据，源为剧本 items 模板或 AI 即兴创建）。"""
+
+    __tablename__ = "player_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    world_player_id: Mapped[int] = mapped_column(
+        ForeignKey("world_players.id"), index=True
+    )
+    def_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # 剧本模板 id
+    name: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(16), default="misc")
+    # equip(装备) | consumable(消耗品) | material(材料) | quest(任务物品) | misc
+    slot: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # weapon | armor | accessory | hand | null
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    level: Mapped[int] = mapped_column(Integer, default=0)  # 强化等级
+    extra: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # 词缀/自定义属性
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class PlayerAbility(Base):
+    """玩家能力实例（源为剧本 abilities 模板或 AI 即兴创建）。"""
+
+    __tablename__ = "player_abilities"
+    __table_args__ = (Index("uq_wp_ability", "world_player_id", "name", unique=True),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    world_player_id: Mapped[int] = mapped_column(
+        ForeignKey("world_players.id"), index=True
+    )
+    def_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    name: Mapped[str] = mapped_column(String(64))
+    level: Mapped[int] = mapped_column(Integer, default=1)
+    extra: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class DynamicTask(Base):
+    """任务/剧情目标实例：主线节拍、支线、AI 动态生成，带进度状态机。"""
+
+    __tablename__ = "dynamic_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    world_id: Mapped[int] = mapped_column(ForeignKey("worlds.id"), index=True)
+    world_player_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("world_players.id"), nullable=True, index=True
+    )  # None = 世界级任务
+    kind: Mapped[str] = mapped_column(String(16), default="side")
+    # main(主线) | side(支线预设) | generated(AI 动态)
+    title: Mapped[str] = mapped_column(String(128))
+    desc: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="active", index=True)
+    # active | done | failed | dropped
+    source: Mapped[str] = mapped_column(String(16), default="preset")  # preset | ai
+    progress_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # {current, target, metric, flags_done: []}
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=now, onupdate=now
+    )

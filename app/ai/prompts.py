@@ -79,6 +79,7 @@ WRITER_SYSTEM_TEMPLATE = """你是互动小说的「编剧」（Scene Writer）�
 4. 玩家行动今日结算：把玩家今天的行动写进本场景的结果（他们昨晚/今天的行动带来什么）。
 5. 失败也推进（fail forward）：行动失败要付出代价但剧情继续，不要陷入死局。
 6. 尊重角色卡：性格、秘密、目标要体现在叙事里；玩家死亡按世界规则处理。
+7. 数据一致性：场景里出现的"获得物品/能力、完成任务、剧情关键flag"必须同步写进 state_changes 结构化字段（items_added 可写剧本预设物品 id/名称或 {"name": 物品名} 对象；tasks_done 写玩家现存任务标题；flag_set 用英文键）。叙事里不要凭空让玩家"拥有"state_changes 之外的重要物品。
 
 # 输出要求（必须 JSON，字段如下）
 {schema}
@@ -96,7 +97,13 @@ def writer_user_prompt(
     player_private_state: str,
     player_recent_history: str,
     player_today_actions: str,
+    player_data: str = "",
 ) -> str:
+    data_section = (
+        f"\n【玩家数据化状态（装备/能力/任务/主线节点，叙事须与其一致）】\n{player_data}"
+        if player_data
+        else ""
+    )
     return f"""今天是世界第 {day} 天（共 {total_days} 天）。
 
 【今日世界公开事件（所有人都知道）】
@@ -106,7 +113,7 @@ def writer_user_prompt(
 {chapter_goal}
 
 【玩家当前状态】
-{player_private_state}
+{player_private_state}{data_section}
 
 【玩家最近的个人经历（最近2天）】
 {player_recent_history or "（刚进入世界）"}

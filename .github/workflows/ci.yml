@@ -28,6 +28,10 @@ jobs:
         run: python tests/flow_test.py
       - name: Web channel test
         run: python tests/web_test.py
+      - name: Rules engine test
+        run: python tests/rules_test.py
+      - name: Entities data test
+        run: python tests/entities_test.py
 
   # ---------- MySQL 集成测试 ----------
   tests-mysql:

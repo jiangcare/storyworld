@@ -12,14 +12,17 @@ from ..ai import director as director_ai
 from ..ai import writer as writer_ai
 from ..db import get_redis
 from ..models import CanonEvent, PlayerAction, Scene, World, WorldPlayer
-from . import script_dsl, world_service
+from . import entities, script_dsl, world_service
 
 logger = logging.getLogger(__name__)
 
 FALLBACK_SCENE = {
     "narrative": "你度过了相对平静的一天。世界仍在运转，而你必须做出自己的选择。",
     "suggested_actions": ["继续观察周围", "检查随身物品", "休息保存体力"],
-    "state_changes": {"hp_delta": 0, "items_added": [], "items_removed": [], "clues_added": [], "notes": {}},
+    "state_changes": {
+        "hp_delta": 0, "items_added": [], "items_removed": [], "clues_added": [],
+        "abilities_added": [], "tasks_done": [], "flag_set": {}, "notes": {},
+    },
     "scene_ended": True,
 }
 
@@ -127,6 +130,7 @@ async def _run_tick_locked(db: Session, world_id: int) -> TickResult | None:
         player_actions = "；".join(
             f"{a.text}" for a in actions if a.user_id == player.user_id
         )
+        player_data = entities.snapshot_for_prompt(db, world, player, content)
         try:
             scene = await writer_ai.generate_scene(
                 script=content,
@@ -138,6 +142,7 @@ async def _run_tick_locked(db: Session, world_id: int) -> TickResult | None:
                 player_private_state=world_service.build_player_state_text(player),
                 player_recent_history=world_service.build_player_recent(db, world, player),
                 player_today_actions=player_actions,
+                player_data=player_data,
             )
         except Exception as e:  # noqa: BLE001
             logger.error("玩家 %s 第 %s 天场景生成失败: %s", player.user_id, day, e)
@@ -145,6 +150,7 @@ async def _run_tick_locked(db: Session, world_id: int) -> TickResult | None:
             scene["narrative"] = f"【第{day}天】{scene['narrative']}"
 
         world_service.apply_state_changes(player, scene["state_changes"])
+        entities.apply_structured_commit(db, world, player, content, scene["state_changes"])
         db.add(
             Scene(
                 world_id=world_id,

@@ -15,9 +15,12 @@ WRITER_OUTPUT_SCHEMA = {
     "suggested_actions": ["str，3-4条建议行动（每条不超过18字，玩家可一键点击）"],
     "state_changes": {
         "hp_delta": "int，生命值变化（无则0）",
-        "items_added": ["str，新增道具"],
-        "items_removed": ["str，失去道具"],
+        "items_added": ["str或对象。掉落/获得物品：写剧本预设物品的 id/名称（如'铁质砍刀'），或对象 {\"name\":\"自创物品名\",\"kind\":\"equip\"}。引擎会查预设表，查不到则现场建档"],
+        "items_removed": ["str，失去道具（名称或模板id）"],
         "clues_added": ["str，新增线索"],
+        "abilities_added": ["str，获得的能力名称（剧本预设能力或即兴命名）"],
+        "tasks_done": ["str，玩家完成的任务标题（须与现存任务标题一致）"],
+        "flag_set": {"键": "bool/int，玩家完成重要剧情后置位的世界标志（英文蛇形键）"},
         "notes": {"键": "str，其他状态记录（好感度、阵营变化等）"},
     },
     "scene_ended": "bool，本日场景是否已到自然结束（玩家无更多事可做）",
@@ -86,5 +89,18 @@ SCRIPT_OUTPUT_SCHEMA = {
             "relation": "str，与玩家的初始关系（友好/中立/敌对）",
         }
     ],
+    "items": [
+        {"id": "str 唯一标识(英文蛇形)", "name": "str 物品名", "kind": "equip|consumable|material|quest|misc", "slot": "weapon|armor|accessory|hand|空", "stats": {"键": "数值，攻击/防御等，可选"}, "desc": "str 简介，可选"}
+    ],
+    "abilities": [
+        {"id": "str 唯一标识", "name": "str 能力名", "desc": "str 效果描述（注入 AI 用）"}
+    ],
+    "task_templates": [
+        {"id": "str", "title": "str 任务标题", "desc": "str 描述", "metric": "str 可选进度口径", "target": "int 目标值", "reward_items": ["str 奖励物品 id/名称，可选"]}
+    ],
+    "mainline": [
+        {"day": "int 触发日", "beat": "str 节点英文名", "flag": "str 达成后置位的flag", "desc": "str 节点描述（给导演）"}
+    ],
+    "rules": "数值规则包（可选）。必须用 JSON 规则 DSL：只允许 constants/checks/percent_mods/forge/draw_pools/synthesize 六类；表达式只支持算术+比较+逻辑+白名单函数(abs/min/max/clamp/floor/ceil/round/sqrt)；禁止循环/递归/任意代码。例: checks={'攻击成功': {'formula': 'clamp(0.5+(attr.strength-attr.agility)*0.03, 0.05, 0.95)'}}, forge={'强化': {'success': {'formula': 'max(0.85 - stat.level*0.12, 0.05)'}}}, draw_pools={'补给箱': [{'item': '铁质砍刀', 'w': 30}, {'item': '药品', 'w': 70}]}。保持简洁，不要巨型结构",
     "system_rules": "str，注入模型的世界运行规则（如何推进剧情、时间管理、死亡规则、结算方式等，200字内）",
 }

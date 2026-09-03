@@ -75,6 +75,54 @@ SEED_SCRIPTS = [
                 {"id": "n1", "name": "光头强", "role": "据点管理者", "personality": "精明的商人式人物", "secret": "他与陌生来客暗中交易物资", "relation": "中立"},
                 {"id": "n2", "name": "小雨", "role": "流浪女孩", "personality": "胆小但消息灵通", "secret": "她看见过夜袭者的脸", "relation": "友好"},
             ],
+            "items": [
+                {"id": "iron_sword", "name": "铁质砍刀", "kind": "equip", "slot": "weapon", "stats": {"attack": 6}, "desc": "生锈但依然致命的砍刀。"},
+                {"id": "old_uniform", "name": "旧军装", "kind": "equip", "slot": "armor", "stats": {"defense": 4}, "desc": "磨损的军装，能挡一些伤害。"},
+                {"id": "bandage", "name": "绷带", "kind": "consumable", "desc": "简易止血绷带。"},
+                {"id": "alcohol", "name": "医用酒精", "kind": "material", "desc": "消毒用的酒精。"},
+                {"id": "iron_ore", "name": "铁矿石", "kind": "material", "desc": "可以熔炼的矿石。"},
+                {"id": "charcoal", "name": "木炭", "kind": "material", "desc": "燃料，也是熔炼必需品。"},
+                {"id": "medkit", "name": "急救包", "kind": "consumable", "desc": "绷带与酒精制成的急救包，+8 生命。"},
+                {"id": "radio_parts", "name": "无线电零件", "kind": "quest", "desc": "修复广播的关键零件。"},
+            ],
+            "abilities": [
+                {"id": "night_vision", "name": "夜视", "desc": "夜战与潜行能力，夜晚探索不会被发现。"},
+                {"id": "field_medic", "name": "战地急救", "desc": "战斗中也能稳定处理伤口。"},
+            ],
+            "task_templates": [
+                {"id": "t_collect", "title": "收集物资", "desc": "在废墟中收集食物与药品", "metric": "collected", "target": 5, "reward_items": ["bandage"]},
+                {"id": "t_radio", "title": "修好无线电", "desc": "找到零件修好据点里的无线电", "metric": "parts", "target": 1, "reward_items": ["radio_parts"]},
+            ],
+            "mainline": [
+                {"day": 1, "beat": "signal", "flag": "heard_signal", "desc": "收音机收到断续的撤离信号"},
+                {"day": 3, "beat": "raid", "flag": "raid_survived", "desc": "深夜袭击：有人受伤、有人失踪"},
+                {"day": 5, "beat": "bridge_down", "flag": "bridge_destroyed", "desc": "北区大桥被炸，撤离路线消失"},
+                {"day": 7, "beat": "final_choice", "flag": "finale", "desc": "南码头空无一人，城市正在燃烧，终极抉择"},
+            ],
+            "rules": {
+                "constants": {"base_dodge": 0.05, "base_attack": 0.5},
+                "checks": {
+                    "attack_success": {"formula": "clamp(const.base_attack + (attr.strength - attr.agility) * 0.04 + stat.level * 0.02, 0.05, 0.95)"},
+                    "dodge": {"formula": "const.base_dodge + attr.agility * 0.03"},
+                    "stealth": {"formula": "clamp(attr.agility * 0.12, 0.05, 0.9)"},
+                },
+                "percent_mods": {
+                    "iron_sword_damage": {"base": 6, "mods": [{"when": "ability.夜视", "pct": 0.25}, {"when": "stat.hp < 3", "pct": 0.2}]},
+                },
+                "forge": {
+                    "sharpen_sword": {"success": {"formula": "max(0.85 - stat.level * 0.12, 0.05)"}},
+                },
+                "draw_pools": {
+                    "supply_crate": [
+                        {"item": "bandage", "w": 35}, {"item": "alcohol", "w": 25},
+                        {"item": "iron_ore", "w": 20}, {"item": "charcoal", "w": 15},
+                        {"item": "iron_sword", "w": 5},
+                    ]
+                },
+                "synthesize": {
+                    "make_medkit": {"inputs": [{"item": "bandage", "qty": 2}, {"item": "alcohol", "qty": 1}], "output": {"item": "medkit", "qty": 1}, "chance": 0.9},
+                },
+            },
             "system_rules": "1) 玩家行动次日结算；2) 生命值归零进入观察者模式；3) 倒计时结束后世界进入终局；4) 玩家之间的信息不对称必须保持——私人场景只写玩家自己能感知的事；5) 死亡/失败都推进剧情，不重开。",
         },
     },

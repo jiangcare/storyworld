@@ -52,6 +52,60 @@ def validate_script(content: dict) -> list[str]:
     world = content.get("world")
     if not isinstance(world, dict) or not world.get("name"):
         errors.append("world.name 必填")
+
+    # ---- 数据化预设段（可选，存在则做结构检查） ----
+    for key in ("items", "abilities", "task_templates"):
+        v = content.get(key)
+        if v is None:
+            continue
+        if not isinstance(v, list):
+            errors.append(f"{key} 必须是数组")
+            continue
+        if key == "items":
+            ids = []
+            for i, it in enumerate(v):
+                if not isinstance(it, dict) or not isinstance(it.get("id"), str):
+                    errors.append(f"items[{i}] 需要 id 字符串")
+                    continue
+                if it["id"] in ids:
+                    errors.append(f"items 重复 id: {it['id']}")
+                ids.append(it["id"])
+                if not isinstance(it.get("name"), str):
+                    errors.append(f"items[{i}] 需要 name 字符串")
+        elif key == "abilities":
+            for i, ab in enumerate(v):
+                if not isinstance(ab, dict) or not isinstance(ab.get("id"), str):
+                    errors.append(f"abilities[{i}] 需要 id 字符串")
+                elif not isinstance(ab.get("name"), str):
+                    errors.append(f"abilities[{i}] 需要 name 字符串")
+        else:  # task_templates
+            for i, t in enumerate(v):
+                if not isinstance(t, dict) or not isinstance(t.get("title"), str):
+                    errors.append(f"task_templates[{i}] 需要 title 字符串")
+
+    ml = content.get("mainline")
+    if ml is not None:
+        if not isinstance(ml, list):
+            errors.append("mainline 必须是数组")
+        else:
+            for i, b in enumerate(ml):
+                if not isinstance(b, dict) or not isinstance(b.get("desc"), str):
+                    errors.append(f"mainline[{i}] 需要 desc 字符串")
+
+    # ---- 数值规则包（走规则引擎验收） ----
+    rules = content.get("rules")
+    if rules not in (None, {}):
+        from ..rules import dsl as rules_dsl
+
+        defs = {
+            "items": {
+                it["id"]: it
+                for it in (content.get("items") or [])
+                if isinstance(it, dict) and isinstance(it.get("id"), str)
+            }
+        }
+        for e in rules_dsl.validate_rule_pack(rules, defs):
+            errors.append(f"rules: {e}")
     return errors
 
 
