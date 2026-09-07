@@ -1,5 +1,7 @@
 # StoryWorld · AI 互动小说世界
 
+终端直接游玩：在项目环境运行 `python run_cli.py`，自动添加内置剧本，输入编号选择并行动。使用 `python run_cli.py --profile 青岚散修` 保存独立档案，下次启动自动恢复。详见 [命令行模式](docs/cli.md)。
+
 > **开放修仙养成**：新增「长生录 · 凡尘修仙」，九个连通地点，自由修炼、采药、炼丹、炼器、交易和经营洞府。没有主线或结局，死亡自动复苏，保留成长；支持 Web 和 Telegram。更新后运行 `python seed.py` 添加入口，输入 `/scripts` 创建世界。详见 [玩法与复活规则](docs/cultivation-sandbox.md)。
 
 > **v0.2 开发进度**：已提供「钟楼雨夜 · 即时单人体验」和「孤岛灯塔 · 即时探索」，自由输入即时执行规则、关键剧情暂停、每回合自动保存，使用 `/continue` 推进、`/resume` 恢复。运行 `seed.py` 添加示例剧本。试玩、事务设计及尚未完成项见 [v0.2 开发说明](docs/mvp-v02-progress.md)。下文的每日结算说明适用于旧版剧本。
@@ -25,7 +27,7 @@
 
 ```
 storyworld/
-├─ run_bot.py / run_web.py / run_admin.py / start_all.py  # 启动入口
+├─ run_bot.py / run_web.py / run_cli.py / run_admin.py / start_all.py  # 启动入口
 ├─ seed.py               # 初始化数据库 + 写入种子剧本
 ├─ smoke_test.py         # 离线全链路测试
 ├─ data/storyworld.db    # 自动创建的本地数据库（不提交到版本库）

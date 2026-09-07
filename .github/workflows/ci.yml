@@ -21,13 +21,15 @@ jobs:
         run: |
           pip install -r requirements.txt -r requirements-dev.txt
       - name: Compile check
-        run: python -m compileall -q app tests seed.py smoke_test.py run_bot.py run_admin.py run_web.py start_all.py backup_db.py
+        run: python -m compileall -q app tests seed.py smoke_test.py run_bot.py run_admin.py run_web.py run_cli.py start_all.py backup_db.py
       - name: Engine smoke test
         run: python smoke_test.py
       - name: Channel / GameFlow test
         run: python tests/flow_test.py
       - name: Web channel test
         run: python tests/web_test.py
+      - name: Command line channel and save resume
+        run: python tests/cli_test.py
       - name: Rules engine test
         run: python tests/rules_test.py
       - name: Entities data test

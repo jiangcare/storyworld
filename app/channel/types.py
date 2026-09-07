@@ -27,7 +27,7 @@ class ChannelCapabilities:
 class ChannelEvent:
     """归一化事件：所有平台的输入都变成这个结构。"""
 
-    platform: str                       # telegram | qq | dingtalk | web ...
+    platform: str                       # telegram | qq | dingtalk | web | cli ...
     user_id: int                        # 平台侧用户 ID
     chat_id: int                        # 平台侧聊天 ID（群或私聊）
     username: Optional[str] = None

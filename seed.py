@@ -201,6 +201,35 @@ from app.engine.cultivation_story import SEED_CULTIVATION
 SEED_SCRIPTS.append(SEED_CULTIVATION)
 
 
+def seed_scripts(db) -> None:
+    """只添加缺少的内置剧本，不创建管理员；由调用方提交事务。"""
+    # 种子剧本（幂等：按标题跳过）
+    for item in SEED_SCRIPTS:
+        exists = db.query(Script).filter(Script.title == item["title"]).first()
+        if exists:
+            logger.info("跳过已存在剧本: %s", item["title"])
+            continue
+        errors = validate_script(item["content_json"])
+        if errors:
+            logger.error("种子剧本校验失败 %s: %s", item["title"], errors)
+            continue
+        db.add(
+            Script(
+                title=item["title"],
+                description=item["description"],
+                genre=item["genre"],
+                mode=item["mode"],
+                min_players=item["min_players"],
+                max_players=item["max_players"],
+                days=item["days"],
+                status="approved",
+                source="official",
+                content_json=item["content_json"],
+            )
+        )
+        logger.info("已写入剧本: %s", item["title"])
+
+
 def seed() -> None:
     init_db()
     db = SessionLocal()
@@ -212,31 +241,7 @@ def seed() -> None:
             db.add(AdminUser(username="admin", password_hash=hash_password("admin123")))
             logger.info("已创建默认管理员 admin/admin123（请尽快在后台修改）")
 
-        # 种子剧本（幂等：按标题跳过）
-        for item in SEED_SCRIPTS:
-            exists = db.query(Script).filter(Script.title == item["title"]).first()
-            if exists:
-                logger.info("跳过已存在剧本: %s", item["title"])
-                continue
-            errors = validate_script(item["content_json"])
-            if errors:
-                logger.error("种子剧本校验失败 %s: %s", item["title"], errors)
-                continue
-            db.add(
-                Script(
-                    title=item["title"],
-                    description=item["description"],
-                    genre=item["genre"],
-                    mode=item["mode"],
-                    min_players=item["min_players"],
-                    max_players=item["max_players"],
-                    days=item["days"],
-                    status="approved",
-                    source="official",
-                    content_json=item["content_json"],
-                )
-            )
-            logger.info("已写入剧本: %s", item["title"])
+        seed_scripts(db)
         db.commit()
         logger.info("种子数据完成")
     finally:
