@@ -21,7 +21,7 @@ from app.engine import world_service
 from app.game.flow import GameFlow
 from app.models import AdminUser, PlayerAction, Script, User, World, WorldPlayer
 from run_cli import play, prepare_database
-from seed import LEGACY_LIGHTHOUSE
+from seed import LEGACY_LIGHTHOUSE, SEED_SCRIPTS
 
 
 class CLITests(unittest.IsolatedAsyncioTestCase):
@@ -169,7 +169,9 @@ class CLITests(unittest.IsolatedAsyncioTestCase):
             env = dict(os.environ, DATABASE_URL='sqlite:///' + str(Path(directory) / 'game.db'),
                        DEEPSEEK_API_KEY='', TELEGRAM_BOT_TOKEN='', PYTHONIOENCODING='utf-8')
             command = [sys.executable, str(root / 'run_cli.py'), '--profile', '进程档案']
-            first = subprocess.run(command, input='1\n修炼\n/quit\n', text=True, encoding='utf-8',
+            titles = [s['title'] for s in reversed(SEED_SCRIPTS) if s['mode'] == 'single']
+            choice = titles.index('长生录 · 凡尘修仙') + 1
+            first = subprocess.run(command, input=f'{choice}\n修炼\n/quit\n', text=True, encoding='utf-8',
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=directory, timeout=30)
             self.assertEqual(first.returncode, 0, first.stderr)
             self.assertIn('经脉', first.stdout)

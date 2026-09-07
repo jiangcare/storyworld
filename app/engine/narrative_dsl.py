@@ -64,17 +64,26 @@ class NPCWorldChange(Spec):
     fear_delta: int = Field(default=0, ge=-100, le=100)
 
 
+class StreamVariant(Spec):
+    flags: dict[str, bool] = Field(min_length=1, max_length=20)
+    text: str = Field(min_length=1, max_length=1500)
+    npcs: dict[str, NPCWorldChange] = Field(default_factory=dict, max_length=20)
+
+
 class StreamBeat(Spec):
     text: str = Field(min_length=1, max_length=1500)
     minutes: int = Field(default=1, ge=1, le=10)
     weather: Optional[str] = Field(default=None, max_length=80)
     npcs: dict[str, NPCWorldChange] = Field(default_factory=dict, max_length=20)
     intervention: bool = False
+    variants: list[StreamVariant] = Field(default_factory=list, max_length=10)
     minimum_world_autonomy: int = Field(default=0, ge=0, le=100)
     player_detail: str = Field(default='', max_length=150)
 
 
 class StreamSpec(Spec):
+    loop: bool = True
+    interval_seconds: Optional[int] = Field(default=None, ge=8, le=120)
     world_autonomy: int = Field(default=95, ge=0, le=100)
     player_autonomy: int = Field(default=30, ge=0, le=100)
     narrative_autonomy: int = Field(default=85, ge=0, le=100)
@@ -88,6 +97,8 @@ class StreamSpec(Spec):
         for beats in self.scenes.values():
             for beat in beats:
                 validate_prose(beat.text)
+                for variant in beat.variants:
+                    validate_prose(variant.text)
                 if beat.player_detail:
                     validate_prose(beat.player_detail)
         return self
@@ -157,8 +168,9 @@ def parse_spec(content: dict) -> NarrativeSpec:
             raise ValueError('叙事流必须引用已知地点')
         for beats in spec.stream.scenes.values():
             for beat in beats:
-                if set(beat.npcs) - npc_ids or any(n.location not in spec.locations for n in beat.npcs.values()):
-                    raise ValueError('世界事件必须引用已知 NPC 和地点')
+                for event in [beat, *beat.variants]:
+                    if set(event.npcs) - npc_ids or any(n.location not in spec.locations for n in event.npcs.values()):
+                        raise ValueError('世界事件必须引用已知 NPC 和地点')
     for interaction in spec.interactions.values():
         if interaction.check and interaction.check not in checks:
             raise ValueError("交互引用了不存在的检定")

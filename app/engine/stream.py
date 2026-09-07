@@ -55,13 +55,13 @@ def specification(content):
 
 
 def interval(state):
-    return max(8, 60 - state['narrative_autonomy'] // 2)
+    return state.get('interval_seconds') or max(8, 60 - state['narrative_autonomy'] // 2)
 
 
 def initial(spec, now):
     state = {'world_autonomy': spec.world_autonomy, 'player_autonomy': spec.player_autonomy,
              'narrative_autonomy': spec.narrative_autonomy, 'manual_pause': False,
-             'intervention': None, 'cursors': {}, 'world': {'npcs': {}, 'weather': ''}}
+             'intervention': None, 'completed': False, 'interval_seconds': spec.interval_seconds, 'cursors': {}, 'world': {'npcs': {}, 'weather': ''}}
     state['next_at'] = now + interval(state)
     return state
 
@@ -98,7 +98,7 @@ def advance(db, world_id, now=None):
             world.progress_json = progress
             db.commit()
             return None
-        if (state['manual_pause'] or state['intervention'] or not state['world_autonomy'] or
+        if (state.get('completed') or state['manual_pause'] or state['intervention'] or not state['world_autonomy'] or
                 not state['narrative_autonomy'] or progress['narrative']['paused'] or
                 progress['narrative']['ending'] or state['next_at'] > now):
             db.rollback()
@@ -111,16 +111,22 @@ def advance(db, world_id, now=None):
         location = player.private_state['location']
         beats = spec.scenes.get(location, [])
         cursor = state['cursors'].get(location, 0)
-        candidates = [(cursor + offset, beats[(cursor + offset) % len(beats)]) for offset in range(len(beats))]
+        candidates = [(cursor + offset, beats[(cursor + offset) % len(beats)]) for offset in range(len(beats))
+                      if spec.loop or cursor + offset < len(beats)]
         choice = next(((index, beat) for index, beat in candidates if beat.minimum_world_autonomy <= state['world_autonomy']), None)
         if choice is None:
             db.rollback()
             return None
         index, beat = choice
         state['cursors'][location] = index + 1
+        if not spec.loop and index + 1 == len(beats):
+            state['completed'] = True
+        flags = progress['narrative']['flags']
+        variant = next((v for v in beat.variants if all(flags.get(k, False) == val for k, val in v.flags.items())), None)
+        event = variant or beat
         if beat.weather:
             state['world']['weather'] = beat.weather
-        for key, change in beat.npcs.items():
+        for key, change in event.npcs.items():
             previous = state['world']['npcs'].get(key, {})
             state['world']['npcs'][key] = {'location': change.location, 'activity': change.activity,
                 'fear': max(0, min(100, previous.get('fear', 0) + change.fear_delta))}
@@ -130,13 +136,13 @@ def advance(db, world_id, now=None):
         state['next_at'] = now + interval(state)
         if beat.intervention:
             state['intervention'] = {'location': location, 'cursor': index, 'revision': timeline['revision']}
-        text = beat.text
+        text = event.text
         if state['player_autonomy'] >= 30 and beat.player_detail:
             text += '\n\n' + beat.player_detail
         from ..ai.prose_contract import validate_prose
         text = validate_prose(text)
         record = NarrativeBeat(world_id=world.id, user_id=player.user_id, revision=timeline['revision'],
-            text=text, receipt={'event': f'{location}:{index}', 'minute': timeline['minute'],
+            text=text, receipt={'event': f'{location}:{index}', 'minute': timeline['minute'], 'branch': dict(variant.flags) if variant else {},
                                 'world': copy.deepcopy(state['world']), 'intervention_required': beat.intervention})
         world.progress_json = progress
         world.day = 1 + timeline['minute'] // 1440
@@ -226,7 +232,7 @@ async def deliver_record(channel, db, record, user_id, *, polish=True):
                                                        WorldPlayer.user_id == record.user_id))
         receipt = copy.deepcopy(record.receipt)
         receipt['results'] = [{'text': text, 'ok': True}]
-        context = {'world': world.title, 'character': player.character_name, 'sandbox': True,
+        context = {'world': world.title, 'character': player.character_name, 'sandbox': bool(world.script.content_json['narrative'].get('sandbox')),
                    'autonomous_world_event': True, 'recent': recent_passages(db, world, player, 3)[:-1],
                    'world_state': receipt['world']}
         db.rollback()
@@ -299,5 +305,7 @@ def control(db, world, command, arg=''):
         db.rollback()
         raise
     status = '暂停' if state['manual_pause'] or not state['world_autonomy'] or not state['narrative_autonomy'] else ('等待玩家介入' if state['intervention'] else '运行中')
+    if state.get('completed'):
+        status = '本段已讲完（仍可自由行动）'
     return (f'叙事流：{status}\nWorld {state["world_autonomy"]} / Player {state["player_autonomy"]} / Narrative {state["narrative_autonomy"]}'
             f'\n段落间隔约 {interval(state)} 秒。/pause 暂停，/stream on 恢复；/pass 表示暂不介入当前事件。')

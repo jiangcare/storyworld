@@ -36,6 +36,8 @@ def social_reply(text: str) -> str | None:
 
 
 def fallback_reply(context: dict | None = None, *, unavailable=False) -> str:
+    if (context or {}).get("narrative_stream"):
+        return "这句话暂时没能接住。请说清想对谁、或对哪样东西做什么。"
     opening = "刚才没能顺利处理这句话，抱歉。" if unavailable else "我还没弄清你想让角色做什么。"
     location = (context or {}).get("location", {})
     name = location.get("name", "") if isinstance(location, dict) else ""

@@ -45,11 +45,40 @@ async def read_line(reader, prompt):
     return await future
 
 
-async def play(channel, reader=input):
+async def open_demo(channel):
+    from sqlalchemy import select
+    from app.db import SessionLocal
+    from app.models import Script
+    from app.engine import world_service
+    from app.engine.novel_slice import CONTENT, OPENING
+    with SessionLocal() as db:
+        user = world_service.get_or_create_user(db, channel.user_id, platform='cli')
+        world = world_service.get_active_world(db, user.id)
+        if world is not None and world.script.title != CONTENT['title']:
+            channel.write('这个档案已有其他世界，请使用另一个 --profile 试玩 Demo。')
+            return False
+        if world is None:
+            script = db.scalar(select(Script).where(Script.title == CONTENT['title'], Script.status == 'approved'))
+            if script is None:
+                raise ValueError('Demo 剧本尚未初始化')
+            world = world_service.create_world(db, user, script, chat_id=channel.user_id)
+            player = world_service.join_world(db, world, user)
+            world_service.start_world(db, world)
+        else:
+            player = next(p for p in world.players if p.user_id == user.id)
+        channel.write(world_service.build_player_recent(db, world, player, 1) or OPENING)
+    return True
+
+
+async def play(channel, reader=input, *, demo=False):
     from app.game.flow import GameFlow
     from app.engine import stream
     flow = GameFlow(channel)
-    await channel.welcome(flow)
+    if demo:
+        if not await open_demo(channel):
+            return
+    else:
+        await channel.welcome(flow)
     channel.streaming_open = True
     task = asyncio.create_task(stream.run(channel))
     try:
@@ -74,10 +103,11 @@ async def play(channel, reader=input):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='在终端中游玩 StoryWorld 单人剧本')
-    parser.add_argument('--profile', default='default', help='本地档案名，默认 default；相同名称恢复同一存档')
+    parser.add_argument('--demo', action='store_true', help='直接进入雨幕便利店小说 Demo，默认使用独立 novel-demo 档案')
+    parser.add_argument('--profile', default=None, help='本地档案名，默认 default；相同名称恢复同一存档')
     args = parser.parse_args(argv)
     try:
-        name = profile_name(args.profile)
+        name = profile_name(args.profile or ('novel-demo' if args.demo else 'default'))
     except ValueError as exc:
         parser.error(str(exc))
     for stream in (sys.stdin, sys.stdout, sys.stderr):
@@ -86,7 +116,7 @@ def main(argv=None):
     logging.basicConfig(level=logging.CRITICAL)
     try:
         prepare_database()
-        asyncio.run(play(CLIChannel(name)))
+        asyncio.run(play(CLIChannel(name), demo=args.demo))
     except KeyboardInterrupt:
         print('\n已中断。行动可能已经保存，下次启动后请查看存档。')
     except Exception as exc:

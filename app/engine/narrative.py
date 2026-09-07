@@ -85,7 +85,7 @@ def context_for(content, state, progress):
         "locations": {k: v.name for k, v in spec.locations.items()},
         "interactions": {k: v.label for k, v in spec.interactions.items() if k not in progress["done"]},
         "player": copy.deepcopy(state), "minute": progress["minute"],
-        "paused": progress["paused"],
+        "paused": progress["paused"], "narrative_stream": bool(spec.stream),
         "play_style": cultivation.HELP if spec.sandbox else "探索剧情，按玩家意愿行动",
     }
 
@@ -230,7 +230,7 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
     except InputRejected as exc:
         return False, str(exc)
     social = (cultivation.social(text) if cultivation.enabled(world.script.content_json) else None) or social_reply(text)
-    if social:
+    if social and not parse_spec(world.script.content_json).stream:
         return True, social
     if guidance.is_location_question(text):
         spec = parse_spec(world.script.content_json)
@@ -258,7 +258,7 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
             explicit = ai.Plan(actions=[ai.Action(kind="rest")])
     for key, interaction in parse_spec(content).interactions.items():
         aliases = interaction.aliases + ([interaction.label] if cultivation.enabled(content) else [])
-        if clean not in aliases:
+        if clean not in [normalized(alias).strip().rstrip("?？!！。.") for alias in aliases]:
             continue
         if not cultivation.enabled(content) and not matches(interaction.requires, player.private_state, world.progress_json["narrative"]):
             continue
@@ -270,6 +270,8 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
     context = context_for(content, player.private_state, previous)
     from .world_service import recent_passages
     recent = recent_passages(db, world, player, limit=2)
+    context['recent'] = recent
+    context['flags'] = copy.deepcopy(previous['flags'])
     context['world_state'] = copy.deepcopy(world.progress_json.get('stream', {}).get('world', {}))
     # 释放读取事务，LLM 网络等待不占用数据库行锁。
     db.rollback()
@@ -338,7 +340,7 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
 
     sandbox = cultivation.enabled(content)
     if (all(not r.get('ok') and not r.get('minutes') for r in receipt['results'])
-            or (sandbox and not settings.deepseek_api_key)) or (not sandbox and len(plan.actions) == 1 and plan.actions[0].kind == "interact"
+            or ((sandbox or parse_spec(content).stream) and not settings.deepseek_api_key)) or (not sandbox and len(plan.actions) == 1 and plan.actions[0].kind == "interact"
             and parse_spec(content).interactions.get(plan.actions[0].target)
             and parse_spec(content).interactions[plan.actions[0].target].verbatim):
         return True, fallback

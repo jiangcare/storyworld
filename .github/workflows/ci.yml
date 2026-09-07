@@ -50,6 +50,8 @@ jobs:
         run: python tests/prose_test.py
       - name: Autonomous narrative stream and player agency
         run: python tests/stream_test.py
+      - name: Ten-minute novel slice and state-dependent interruption
+        run: python tests/novel_slice_test.py
       - name: Conversational replies without game state changes
         run: python tests/conversation_test.py
       - name: Player guidance and numbered choices

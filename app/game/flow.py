@@ -430,8 +430,8 @@ class GameFlow:
                 if narrative.enabled(script.content_json):
                     await self._send_play(
                         ev, db, world, world.players[0],
-                        f"🌍 单人世界【{world.title}】已开始！\n"
-                        f"你是{world.players[0].character_name}。\n\n"
+                        ("" if script.content_json["narrative"].get("stream") else
+                         f"🌍 单人世界【{world.title}】已开始！\n你是{world.players[0].character_name}。\n\n")
                         + (cultivation.OPENING_PROSE if cultivation.enabled(script.content_json) else script.content_json["narrative"]["opening"]),
                     )
                     return

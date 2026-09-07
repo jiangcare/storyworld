@@ -79,3 +79,7 @@ python tests/cli_test.py
 ```
 
 测试使用临时 SQLite 文件，覆盖真实终端入口、标准输入、退出与重启恢复、独立档案、菜单编号、旧版每日结算、只读操作和异常处理，不修改玩家真实存档。
+
+## 直接试玩小说切片
+
+`python run_cli.py --demo` 直接呈现雨幕便利店正文，使用独立 `novel-demo` 档案。无需操作，每30秒继续一段，二十段后在介入点停住。随时自由输入；新一轮用 `--profile 新档案名`。固定节奏不受 `/autonomy narrative=...` 改速（0仍暂停），也不循环重播。详见 [体验规格](novel-vertical-slice.md)。
