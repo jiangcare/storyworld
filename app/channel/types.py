@@ -53,6 +53,8 @@ def parse_command(text: str) -> tuple[Optional[str], str]:
     if not text.startswith("/"):
         return None, text
     parts = text[1:].split(None, 1)
+    if not parts:
+        return "", ""
     cmd = parts[0].lower()
     # 去掉 @botname 后缀
     if "@" in cmd:

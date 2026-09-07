@@ -28,6 +28,7 @@ WRITER_OUTPUT_SCHEMA = {
 
 # ---- 意图层：玩家输入理解 ----
 INTENT_OUTPUT_SCHEMA = {
+    "reply": "str，不执行行动时对玩家的自然回应或具体澄清问题，最多400字；执行行动时为空",
     "scope": "str，gameplay 或 out_of_scope，必须先判断是否属于当前游戏",
     "action_type": "str，枚举: investigate(调查) | talk(交谈) | move(移动) | use(使用道具) | fight(战斗) | help(求助/协作) | hide(躲藏) | rest(休息) | other(其他)",
     "target": "str，行动对象（人物/地点/物品），无则空",

@@ -6,6 +6,7 @@ import time
 
 from ..ai.policy import InputRejected, check_player_input
 from ..ai import script_ai
+from ..ai.conversation import social_reply
 from ..channel.base import Channel
 from ..channel.types import Action, ChannelEvent, parse_command
 from ..config import settings
@@ -173,7 +174,7 @@ class GameFlow:
             elif cmd == "upload":
                 await self._cmd_upload(ev, db, arg)
             else:
-                await _ch(ev).send(ev.chat_id, "未知命令。发 /start 查看帮助。")
+                await _ch(ev).send(ev.chat_id, "我没认出这个命令。可以输入 /guide 看看眼下能做什么，也可以直接用一句话告诉我。")
         finally:
             db.close()
 
@@ -337,7 +338,8 @@ class GameFlow:
             if world is None:
                 await _ch(ev).send(
                     ev.chat_id,
-                    HELP_TEXT if guidance.is_help(text) else "你当前没有进行中的世界。用 /scripts 或 /create_world 开始吧。",
+                    HELP_TEXT if guidance.is_help(text) else (social_reply(text) or "我在呢。")
+                    + "\n这里暂时没有正在进行的故事。用 /scripts 挑一个剧本，或 /resume 回顾上次的旅程吧。",
                 )
                 return
             player = world_service.get_player(db, world, user.id)
@@ -345,7 +347,10 @@ class GameFlow:
                 await _ch(ev).send(ev.chat_id, "你不是这个世界的玩家。")
                 return
             ok, msg = await world_service.record_action(db, world, player, text)
-            await self._send_play(ev, db, world, player, msg, explain=guidance.is_help(text))
+            if social_reply(text):
+                await _ch(ev).send(ev.chat_id, msg)
+            else:
+                await self._send_play(ev, db, world, player, msg, explain=guidance.is_help(text))
         finally:
             db.close()
 

@@ -13,6 +13,7 @@ from sqlalchemy import select
 
 from ..ai import narrative as ai
 from ..ai.policy import InputRejected, check_player_input
+from ..ai.conversation import ConversationReply, fallback_reply, social_reply
 from ..db import begin_write
 from ..models import PlayerAction, World, WorldPlayer
 from ..rules import engine as rules
@@ -196,6 +197,9 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
         check_player_input(text)
     except InputRejected as exc:
         return False, str(exc)
+    social = social_reply(text)
+    if social:
+        return True, social
     if guidance.is_help(text):
         return True, "你可以探索环境、寻找线索，并决定角色的行动。查看引导不会推进时间。"
     world_id, player_id, user_id = world.id, player.id, player.user_id
@@ -217,11 +221,13 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
             plan = ai.Plan(actions=[ai.Action(kind="look")])
         else:
             plan = await ai.parse_plan(text, context)
+    except ConversationReply as exc:
+        return False, str(exc) + "\n这次只是聊聊，没有推进游戏时间。"
     except InputRejected as exc:
         return False, str(exc)
-    except Exception:
-        logger.warning("单人意图解析失败", exc_info=True)
-        return False, "暂时无法把这段意图转成可执行行动；世界未改变。请更具体地描述目标与做法。"
+    except Exception as exc:
+        logger.warning("单人意图未能完成：%s", type(exc).__name__)
+        return False, fallback_reply(context, unavailable=True) + "\n你还停留在原处，这次没有消耗游戏时间。"
 
     try:
         begin_write(db)

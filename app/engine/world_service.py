@@ -9,7 +9,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..ai import intent as intent_ai
-from ..ai.policy import InputRejected, REFUSAL, check_player_input
+from ..ai.policy import InputRejected, check_player_input
+from ..ai.conversation import ConversationReply, fallback_reply, social_reply
 from ..config import settings
 from ..db import begin_write
 from ..models import (
@@ -217,6 +218,9 @@ async def record_action(
     except InputRejected as exc:
         return False, str(exc)
 
+    social = social_reply(text)
+    if social:
+        return True, social
     if narrative.enabled(world.script.content_json):
         return await narrative.take_turn(db, world, player, text)
 
@@ -236,9 +240,16 @@ async def record_action(
     context = {"world": world.script.content_json.get("world", {}),
                "character": player.character_name, "state": copy.deepcopy(player.private_state)}
     db.rollback()
-    intent = await parse_action_intent(text, context)
+    try:
+        intent = await parse_action_intent(text, context, raise_errors=True)
+    except ConversationReply as exc:
+        return False, str(exc) + "\n这次只是聊聊，没有消耗游戏时间或行动点。"
+    except InputRejected as exc:
+        return False, str(exc)
+    except Exception:
+        return False, fallback_reply(context, unavailable=True) + "\n这次没有记录行动，也没有消耗行动点。"
     if intent is None:
-        return False, REFUSAL
+        return False, fallback_reply(context)
     try:
         begin_write(db)
         db.refresh(world)
@@ -269,13 +280,19 @@ async def record_action(
     return True, f"已记录你的行动（第{day}天）。今日剩余行动点：{left}。"
 
 
-async def parse_action_intent(text: str, context: dict | None = None) -> dict | None:
+async def parse_action_intent(text: str, context: dict | None = None, *, raise_errors=False) -> dict | None:
     """解析失败或范围不明时不产生意图；绝不能把原文作为兜底转交其他模型。"""
     try:
         check_player_input(text)
         return intent_ai.validate_intent(await intent_ai.parse_intent(text, context))
+    except ConversationReply:
+        if raise_errors:
+            raise
+        return None
     except Exception as exc:
         logger.warning("游戏意图未获准：%s", type(exc).__name__)
+        if raise_errors:
+            raise
         return None
 
 

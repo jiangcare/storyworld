@@ -73,6 +73,7 @@ storyworld/
 
 打开 `http://127.0.0.1:8081/web`，输入昵称即进入个人世界聊天室：
 
+- **自然回应**：问候、情绪、模糊表达也会得到回应；需要时追问具体目标。交流不扣行动点、不推进剧情，无法理解或模型暂时不可用时仍有本地回应。
 - **即时单人引导**：开局、状态和每轮回复显示目标与当前可执行选项。回复编号或点击按钮即可行动；“怎么玩”“这是要干嘛”及 `/guide` 显示说明，不扣时间。观察不耗时，`/continue` 明确等待 5 分钟。
 - **个人私聊**：输入 `/start` 开始，自由文字 = 行动（网页点击建议行动按钮亦可）
 - **单人闯关**：点"剧本列表"选 👤 单人剧本，世界在个人聊天里推进
@@ -132,6 +133,7 @@ cp .env.example .env
 .venv/bin/python tests/harness_test.py
 .venv/bin/python tests/game_boundary_test.py
 .venv/bin/python tests/guidance_test.py
+.venv/bin/python tests/conversation_test.py
 ```
 
 测试创建独立临时数据库，仅模拟 AI，不连接外部服务，也不改动实际存档。CI 另外在 Python 3.11 安装官方 SDK，使用本地模拟 DeepSeek HTTP 接口验证真实 Harness 运行时；复现方式见 [AI 接入说明](docs/ai-harness.md)。
