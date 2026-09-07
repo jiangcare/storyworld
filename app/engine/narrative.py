@@ -12,6 +12,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from ..ai import narrative as ai
+from ..ai.policy import InputRejected, check_player_input
 from ..db import begin_write
 from ..models import PlayerAction, World, WorldPlayer
 from ..rules import engine as rules
@@ -85,6 +86,7 @@ def context_for(content, state, progress):
 
 def evaluate(content, state, progress, plan: ai.Plan, rng=None):
     """在副本上计算；失败的后续动作停止，已执行步骤仍产生真实后果。"""
+    plan = ai.Plan.model_validate(plan.model_dump())
     spec = parse_spec(content)
     state, progress = copy.deepcopy(state), copy.deepcopy(progress)
     results = []
@@ -189,8 +191,10 @@ def format_receipt(receipt):
 
 
 async def take_turn(db, world, player, text, *, advance=False):
-    if not text.strip() or len(text) > 500:
-        return False, "请用 1-500 字描述行动。"
+    try:
+        check_player_input(text)
+    except InputRejected as exc:
+        return False, str(exc)
     world_id, player_id, user_id = world.id, player.id, player.user_id
     content = copy.deepcopy(world.script.content_json)
     previous = copy.deepcopy(world.progress_json["narrative"])
@@ -199,6 +203,8 @@ async def take_turn(db, world, player, text, *, advance=False):
     db.rollback()
     try:
         plan = ai.Plan(actions=[ai.Action(kind="wait")]) if advance else await ai.parse_plan(text, context)
+    except InputRejected as exc:
+        return False, str(exc)
     except Exception:
         logger.warning("单人意图解析失败", exc_info=True)
         return False, "暂时无法把这段意图转成可执行行动；世界未改变。请更具体地描述目标与做法。"

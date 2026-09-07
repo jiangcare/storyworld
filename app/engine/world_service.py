@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..ai import intent as intent_ai
+from ..ai.policy import InputRejected, REFUSAL, check_player_input
 from ..config import settings
 from ..db import begin_write
 from ..models import (
@@ -211,19 +212,33 @@ async def record_action(
         return False, "当前世界不在进行中。"
     if player.status != "alive":
         return False, "你的角色已死亡，进入观察者模式。"
-    if len(text) > 500:
-        return False, "行动描述太长了（最多500字）。"
+    try:
+        check_player_input(text)
+    except InputRejected as exc:
+        return False, str(exc)
 
     if narrative.enabled(world.script.content_json):
         return await narrative.take_turn(db, world, player, text)
 
-    world_id, player_id = world.id, player.id
+    world_id, player_id, expected_day = world.id, player.id, world.day
+    # 快速拒绝已无行动点的请求，避免每次无效提交都消耗 AI 调用；提交时仍原子复查。
+    used = db.scalar(select(func.count(PlayerAction.id)).where(
+        PlayerAction.world_id == world_id, PlayerAction.user_id == player.user_id,
+        PlayerAction.day == expected_day,
+    )) or 0
+    if used >= settings.max_action_points:
+        return False, f"今天的行动点已用完（{settings.max_action_points}点）。等明天的新剧情吧。"
+    context = {"world": world.script.content_json.get("world", {}),
+               "character": player.character_name, "state": copy.deepcopy(player.private_state)}
     db.rollback()
+    intent = await parse_action_intent(text, context)
+    if intent is None:
+        return False, REFUSAL
     try:
         begin_write(db)
         db.refresh(world)
         db.refresh(player)
-        if world.status != "running" or player.status != "alive" or player.world_id != world_id:
+        if world.status != "running" or world.day != expected_day or player.status != "alive" or player.world_id != world_id:
             db.rollback()
             return False, "世界或角色当前不能行动。"
         lease = db.get(RuntimeEntry, f"lock:tick:{world_id}")
@@ -238,7 +253,7 @@ async def record_action(
             db.rollback()
             return False, f"今天的行动点已用完（{settings.max_action_points}点）。等明天的新剧情吧。"
         day = world.day
-        db.add(PlayerAction(world_id=world_id, user_id=player.user_id, day=day, text=text))
+        db.add(PlayerAction(world_id=world_id, user_id=player.user_id, day=day, text=text, intent=intent))
         db.commit()
     except Exception:
         db.rollback()
@@ -249,13 +264,14 @@ async def record_action(
     return True, f"已记录你的行动（第{day}天）。今日剩余行动点：{left}。"
 
 
-async def parse_action_intent(text: str) -> dict:
-    """解析玩家行动意图（失败时返回兜底意图，不阻断流程）。"""
+async def parse_action_intent(text: str, context: dict | None = None) -> dict | None:
+    """解析失败或范围不明时不产生意图；绝不能把原文作为兜底转交其他模型。"""
     try:
-        return await intent_ai.parse_intent(text)
-    except Exception as e:  # noqa: BLE001
-        logger.warning("意图解析失败: %s", e)
-        return {"action_type": "other", "target": "", "summary": text[:20], "dice_check": False, "attribute": ""}
+        check_player_input(text)
+        return intent_ai.validate_intent(await intent_ai.parse_intent(text, context))
+    except Exception as exc:
+        logger.warning("游戏意图未获准：%s", type(exc).__name__)
+        return None
 
 
 # ---------------- 状态/摘要 ----------------
@@ -289,11 +305,9 @@ def build_actions_summary(db: Session, world: World, day: int) -> str:
             if p.user_id == a.user_id:
                 name = p.character_name
                 break
-        intent = a.intent or {}
-        if intent.get("summary"):
-            lines.append(f"- {name}：{intent['summary']}（原文：{a.text[:60]}）")
-        else:
-            lines.append(f"- {name}：{a.text[:60]}")
+        summary = intent_ai.safe_summary(a.intent)
+        if summary:
+            lines.append(f"- {name}：{summary}")
     return "\n".join(lines)
 
 

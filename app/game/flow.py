@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import time
 
+from ..ai.policy import InputRejected, check_player_input
 from ..ai import script_ai
 from ..channel.base import Channel
 from ..channel.types import Action, ChannelEvent, parse_command
@@ -289,8 +290,10 @@ class GameFlow:
                 "用法：/upload <你的剧本草稿>\n\n草稿可以只有世界观、几个角色或一个点子，AI 会帮你完善成完整剧本并提交审核。\n\n示例：/upload 一个末日世界，4个幸存者，有倒计时，第七天有救赎机会",
             )
             return
-        if len(draft) > 3000:
-            await _ch(ev).send(ev.chat_id, "草稿太长了（最多3000字）。")
+        try:
+            check_player_input(draft, max_length=3000)
+        except InputRejected as exc:
+            await _ch(ev).send(ev.chat_id, str(exc))
             return
         key = f"draft:{ev.platform}:{ev.user_id}:{int(time.time())}"
         r = await get_store()
@@ -418,18 +421,18 @@ class GameFlow:
             if world.day != day:
                 await _ch(ev).ack(ev, "这个场景已过期，等新一天的剧情吧。", alert=True)
                 return
-            scene = db.query(Scene).filter(
-                Scene.world_id == world_id,
-                Scene.day == day,
-                Scene.user_id == ev.user_id,
-            ).first()
-            if scene is None or idx >= len(scene.suggested_actions):
-                await _ch(ev).ack(ev, "找不到对应行动。")
-                return
             user = world_service.get_or_create_user(
                 db, ev.user_id, platform=ev.platform,
                 username=ev.username, display_name=ev.display_name,
             )
+            scene = db.query(Scene).filter(
+                Scene.world_id == world_id,
+                Scene.day == day,
+                Scene.user_id == user.id,
+            ).first()
+            if scene is None or idx < 0 or idx >= len(scene.suggested_actions):
+                await _ch(ev).ack(ev, "找不到对应行动。")
+                return
             player = world_service.get_player(db, world, user.id)
             if player is None:
                 await _ch(ev).ack(ev, "你不是这个世界的玩家。")
@@ -444,6 +447,9 @@ class GameFlow:
         try:
             mode, key = data.split(":", 1)
         except ValueError:
+            await _ch(ev).ack(ev, "操作无效。", alert=True)
+            return
+        if mode not in ("single", "multi") or not key.startswith(f"draft:{ev.platform}:{ev.user_id}:"):
             await _ch(ev).ack(ev, "操作无效。", alert=True)
             return
         r = await get_store()

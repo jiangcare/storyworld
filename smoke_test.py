@@ -31,11 +31,11 @@ async def fake_world_update(**kw):
 async def fake_scene(**kw):
     name = kw["character_card"].get("name", "你")
     return {
-        "narrative": f"[第{kw['day']}天] {name}在废墟中发现半罐饮用水，远处传来枪声。\n今日世界：{kw['world_broadcast'][:40]}",
+        "narrative": f"[第{kw['day']}天] {name}在废墟中发现绷带，远处传来枪声。\n今日世界：{kw['world_broadcast'][:40]}",
         "suggested_actions": ["查看枪声方向", "继续搜索物资", "回到据点"],
         "state_changes": {
             "hp_delta": -1,
-            "items_added": ["半罐饮用水"],
+            "items_added": ["绷带"],
             "items_removed": [],
             "clues_added": [],
             "notes": {},
@@ -44,9 +44,9 @@ async def fake_scene(**kw):
     }
 
 
-async def fake_intent(text: str):
+async def fake_intent(text: str, context=None):
     return {
-        "action_type": "investigate",
+        "scope": "gameplay", "action_type": "investigate",
         "target": "",
         "summary": text[:20],
         "dice_check": False,
@@ -128,7 +128,7 @@ async def main():
     assert len(scenes) == 2, f"应有2个场景，实际{len(scenes)}"
     p1 = world_service.get_player(db, w2, u1.id)
     assert p1.private_state["hp"] == 9, f"hp应-1为9，实际{p1.private_state['hp']}"
-    assert "半罐饮用水" in p1.private_state["items"], "道具应入库"
+    assert "绷带" in p1.private_state["items"], "道具应入库"
     assert res.broadcast and res.scenes[0]["scene"]["narrative"], "广播与叙事非空"
     print("[OK] 多人世界：加入/分配角色/行动点限制/首次tick/状态变更")
 

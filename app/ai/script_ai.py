@@ -4,12 +4,14 @@ import logging
 
 from . import prompts, schemas
 from .client import client
+from .policy import InputRejected, REFUSAL, check_player_input
 
 logger = logging.getLogger(__name__)
 
 
 async def complete_script(draft: str, mode: str = "multi") -> dict:
     """把用户上传的剧本草稿交给 AI 完善为完整剧本。"""
+    check_player_input(draft, max_length=3000)
     mode = "single" if mode == "single" else "multi"
     system = prompts.SCRIPT_BUILDER_SYSTEM_TEMPLATE.format(
         schema=prompts._schema_hint(schemas.SCRIPT_OUTPUT_SCHEMA)
@@ -19,6 +21,8 @@ async def complete_script(draft: str, mode: str = "multi") -> dict:
         prompts.script_builder_user_prompt(mode, draft),
         max_tokens=4000,
     )
+    if data.pop("scope", None) != "script":
+        raise InputRejected(REFUSAL)
     return _normalize(data, mode)
 
 

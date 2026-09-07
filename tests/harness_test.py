@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.config import settings
 from app.ai.client import LLMClient, LLMError
+from app.ai.policy import GAME_BOUNDARY
 from app.ai.harness_backend import HarnessBackend, HarnessError
 
 
@@ -35,7 +36,7 @@ class HarnessTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(client._harness, "generate", AsyncMock(return_value='{"ok":true}')) as generate, \
                 patch("app.ai.client.AsyncOpenAI") as direct:
             self.assertEqual(await client.chat_json("系统", "玩家", max_tokens=321, temperature=0.2), {"ok": True})
-            generate.assert_awaited_once_with("系统", "玩家", max_tokens=321, temperature=0.2)
+            generate.assert_awaited_once_with(GAME_BOUNDARY + "\n\n【本次游戏职责】\n系统", "玩家", max_tokens=321, temperature=0.2)
             direct.assert_not_called()
 
     async def test_direct_mode_explicitly_selected(self):

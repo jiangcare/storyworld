@@ -55,8 +55,8 @@ async def fake_scene(**kw):
             "scene_ended": False}
 
 
-async def fake_intent(text):
-    return {"action_type": "other", "target": "", "summary": text[:20], "dice_check": False, "attribute": ""}
+async def fake_intent(text, context=None):
+    return {"scope": "gameplay", "action_type": "other", "target": "", "summary": text[:20], "dice_check": False, "attribute": ""}
 
 
 async def fake_complete(draft, mode):

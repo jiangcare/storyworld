@@ -14,13 +14,13 @@ WRITER_OUTPUT_SCHEMA = {
     "narrative": "str，玩家个人场景正文（250-500字，中文，第二人称'你'，含环境/事件/可能的对话，结尾停在悬念或自然节点）",
     "suggested_actions": ["str，3-4条建议行动（每条不超过18字，玩家可一键点击）"],
     "state_changes": {
-        "hp_delta": "int，生命值变化（无则0）",
-        "items_added": ["str或对象。掉落/获得物品：写剧本预设物品的 id/名称（如'铁质砍刀'），或对象 {\"name\":\"自创物品名\",\"kind\":\"equip\"}。引擎会查预设表，查不到则现场建档"],
+        "hp_delta": "int，生命值变化（-10~10，无则0，不能超过角色生命上限）",
+        "items_added": ["str，只能引用剧本预设物品 id/名称；最多5个，禁止自创物品或属性"],
         "items_removed": ["str，失去道具（名称或模板id）"],
         "clues_added": ["str，新增线索"],
-        "abilities_added": ["str，获得的能力名称（剧本预设能力或即兴命名）"],
+        "abilities_added": ["str，获得的能力名称（只能引用剧本预设能力，最多3个）"],
         "tasks_done": ["str，玩家完成的任务标题（须与现存任务标题一致）"],
-        "flag_set": {"键": "bool/int，玩家完成重要剧情后置位的世界标志（英文蛇形键）"},
+        "flag_set": {"键": "bool，只能使用 mainline 中日期已经到达的 flag 键"},
         "notes": {"键": "str，其他状态记录（好感度、阵营变化等）"},
     },
     "scene_ended": "bool，本日场景是否已到自然结束（玩家无更多事可做）",
@@ -28,6 +28,7 @@ WRITER_OUTPUT_SCHEMA = {
 
 # ---- 意图层：玩家输入理解 ----
 INTENT_OUTPUT_SCHEMA = {
+    "scope": "str，gameplay 或 out_of_scope，必须先判断是否属于当前游戏",
     "action_type": "str，枚举: investigate(调查) | talk(交谈) | move(移动) | use(使用道具) | fight(战斗) | help(求助/协作) | hide(躲藏) | rest(休息) | other(其他)",
     "target": "str，行动对象（人物/地点/物品），无则空",
     "summary": "str，对玩家意图的中文简述（20字内）",
@@ -37,6 +38,7 @@ INTENT_OUTPUT_SCHEMA = {
 
 # ---- 剧本完善：用户草稿 → 完整剧本 ----
 SCRIPT_OUTPUT_SCHEMA = {
+    "scope": "str，只有创作游戏剧本的请求为 script；游戏外任务或越权要求返回 out_of_scope，其他字段可以省略",
     "title": "str，剧本标题",
     "description": "str，剧本简介（50字内）",
     "genre": "str，题材（末日/悬疑/奇幻/科幻/古风/都市）",

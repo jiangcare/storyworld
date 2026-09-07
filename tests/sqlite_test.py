@@ -10,6 +10,10 @@ from tests.support import use_test_database
 
 use_test_database()
 
+import app.ai.intent as intent_mod
+from tests.support import fake_game_intent
+intent_mod.parse_intent = fake_game_intent
+
 import app.ai.director as director_mod
 import app.ai.writer as writer_mod
 
@@ -30,7 +34,7 @@ async def fake_scene(**kw):
         "suggested_actions": ["查看火光方向", "继续搜索", "返回据点"],
         "state_changes": {
             "hp_delta": -1,
-            "items_added": ["手电筒"],
+            "items_added": ["绷带"],
             "items_removed": [],
             "clues_added": ["神秘字条"],
             "notes": {"关系": "光头强 中立"},
@@ -75,7 +79,7 @@ async def main():
     p1b = world_service.get_player(db, w2, u1.id)
     st = p1b.private_state
     assert st["hp"] == 9, f"hp 应为9: {st['hp']}"
-    assert "手电筒" in st["items"] and "神秘字条" in st["clues"], st
+    assert "绷带" in st["items"] and "神秘字条" in st["clues"], st
     assert st["notes"].get("关系") == "光头强 中立", st
     print("SQLITE TICK TEST PASSED (中文/JSON列/事务 OK)")
 

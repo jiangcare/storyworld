@@ -8,6 +8,7 @@ from openai import AsyncOpenAI
 
 from ..config import settings
 from .harness_backend import HarnessBackend, HarnessError
+from .policy import GAME_BOUNDARY
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class LLMClient:
                 timeout=settings.llm_timeout,
                 max_retries=0,
             )
+        system = GAME_BOUNDARY + "\n\n【本次游戏职责】\n" + system
         last_err: Exception | None = None
         for attempt in range(retries + 1):
             try:

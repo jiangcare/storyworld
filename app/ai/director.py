@@ -3,6 +3,7 @@ import json
 import logging
 
 from . import prompts, schemas
+from .outputs import WorldOutput, public_script
 from .client import client, LLMError
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,6 @@ async def generate_world_update(
     actions_summary: str,
 ) -> dict:
     system = prompts.DIRECTOR_SYSTEM_TEMPLATE.format(
-        script_json=json.dumps(script, ensure_ascii=False),
         schema=prompts._schema_hint(schemas.DIRECTOR_OUTPUT_SCHEMA),
     )
     user = prompts.director_user_prompt(
@@ -33,23 +33,10 @@ async def generate_world_update(
         players_status=players_status,
         actions_summary=actions_summary,
     )
+    user = json.dumps({"script": public_script(script), "game_context": user}, ensure_ascii=False)
     data = await client.chat_json(system, user, max_tokens=1800)
     return _coerce(data)
 
 
 def _coerce(data: dict) -> dict:
-    def s(key: str, default: str = "") -> str:
-        v = data.get(key)
-        return v if isinstance(v, str) else default
-
-    def sl(key: str) -> list:
-        v = data.get(key)
-        return v if isinstance(v, list) else []
-
-    return {
-        "public_broadcast": s("public_broadcast") or "（今日无事发生，世界静默。）",
-        "canon_additions": [str(x) for x in sl("canon_additions")],
-        "countdown_update": s("countdown_update"),
-        "chapter_note": s("chapter_note"),
-        "world_ended": bool(data.get("world_ended", False)),
-    }
+    return WorldOutput.model_validate(data).model_dump()

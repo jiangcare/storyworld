@@ -12,6 +12,7 @@
 
 - **AI 生成**：通过官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) SDK 管理调用，默认模型 `deepseek-v4-flash`，独立无工具会话与结构化 JSON 输出
 - **数据化玩法**：剧本预设（物品/能力/任务/主线）+ 运行时实体表（结构化提交）；**数值规则引擎**（JSON DSL：攻击/闪避/百分比加成/强化/抽奖/合成），每剧本规则可不同，AI 生成需过复杂度验收闸门
+- **输入边界**：只接受游戏内行动，范围不明或越权输入不记账；状态变更由服务端验收，详见 [游戏输入约束](docs/game-boundary.md)
 - **存储**：SQLite（SQLAlchemy），游戏存档、登录会话、草稿和结算租约保存在本地文件，无需额外服务
 - **通道**：Telegram（aiogram 3 长轮询）+ Web（浏览器聊天室，含房间多人），本地部署无需域名/服务器
 - **后台**：FastAPI + Jinja2 + Bootstrap，管理剧本、审核上传、监控世界
@@ -128,6 +129,7 @@ cp .env.example .env
 .venv/bin/python tests/admin_test.py
 .venv/bin/python tests/local_storage_test.py
 .venv/bin/python tests/harness_test.py
+.venv/bin/python tests/game_boundary_test.py
 ```
 
 测试创建独立临时数据库，仅模拟 AI，不连接外部服务，也不改动实际存档。CI 另外在 Python 3.11 安装官方 SDK，使用本地模拟 DeepSeek HTTP 接口验证真实 Harness 运行时；复现方式见 [AI 接入说明](docs/ai-harness.md)。

@@ -19,3 +19,9 @@ def use_test_database():
         directory.cleanup()
     atexit.register(cleanup)
     return engine
+
+
+async def fake_game_intent(text, context=None):
+    """存储测试只替换模型，保留真实意图协议和引擎验收。"""
+    return {"scope": "gameplay", "action_type": "investigate", "target": "",
+            "summary": "尝试观察四周", "dice_check": False, "attribute": ""}

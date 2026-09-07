@@ -9,6 +9,10 @@ from tests.support import use_test_database
 
 use_test_database()
 
+import app.ai.intent as intent_mod
+from tests.support import fake_game_intent
+intent_mod.parse_intent = fake_game_intent
+
 from fastapi.testclient import TestClient
 from app.web.main import app
 

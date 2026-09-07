@@ -30,6 +30,10 @@ class StorageTests(unittest.IsolatedAsyncioTestCase):
         dbmod.Base.metadata.drop_all(dbmod.engine)
         dbmod.init_db()
         self.store = LocalStore(dbmod.engine)
+        from tests.support import fake_game_intent
+        mock = patch("app.ai.intent.parse_intent", side_effect=fake_game_intent)
+        mock.start()
+        self.addCleanup(mock.stop)
 
     def world(self, realtime=False):
         from seed import SEED_SCRIPTS
@@ -161,7 +165,7 @@ asyncio.run(main())
             # 旧实现会在第一个玩家 flush 后持写锁，第二次写会话将阻塞。
             await asyncio.wait_for(self.store.set("session:while-ai", "user", ex=60), timeout=3)
             return {"narrative": "场景", "suggested_actions": [],
-                    "state_changes": {"hp_delta": -1, "items_added": ["绳子"], "notes": {"记忆": "雨夜"}}}
+                    "state_changes": {"hp_delta": -1, "items_added": ["绷带"], "notes": {"记忆": "雨夜"}}}
         with patch("app.engine.tick.director_ai.generate_world_update", AsyncMock(return_value={"public_broadcast": "世界动态"})), \
                 patch("app.engine.tick.writer_ai.generate_scene", side_effect=writer):
             for _ in range(2):

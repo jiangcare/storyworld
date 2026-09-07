@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 
 from ..ai import director as director_ai
 from ..ai import writer as writer_ai
+from ..ai.intent import safe_summary
+from ..ai.outputs import WorldOutput, validate_scene
 from ..db import begin_write, get_store
 from ..models import CanonEvent, PlayerAction, RuntimeEntry, Scene, World, WorldPlayer
 from . import entities, narrative, script_dsl, world_service
@@ -82,7 +84,6 @@ async def _run_tick_locked(db: Session, world_id: int, lease_token=None) -> Tick
     w = content.get("world", {})
     recent_canon = world_service.build_canon_summary(db, world)
     players_status = world_service.build_players_status(db, world)
-    actions_summary = world_service.build_actions_summary(db, world, day)
     world_progress = copy.deepcopy(world.progress_json)
     player_inputs = []
     for player in world.players:
@@ -99,8 +100,12 @@ async def _run_tick_locked(db: Session, world_id: int, lease_token=None) -> Tick
     # 所有 AI 输入先拍快照；生成全部玩家场景时不持有数据库写事务。
     db.rollback()
     for action in action_inputs:
-        if action["intent"] is None:
-            action["intent"] = await world_service.parse_action_intent(action["text"])
+        if not safe_summary(action["intent"]):
+            action["intent"] = await world_service.parse_action_intent(action["text"], {"world": w})
+    # 只传范围校验后的摘要；旧记录或解析失败不回退到玩家原文。
+    names = {p["user_id"]: p["card"].get("name", "玩家") for p in player_inputs}
+    actions_summary = "\n".join(f"{names.get(a['user_id'], '玩家')}：{safe_summary(a['intent'])}"
+                                for a in action_inputs if safe_summary(a["intent"]))
     try:
         wu = await director_ai.generate_world_update(
             script=content, day=day, total_days=total_days,
@@ -108,8 +113,11 @@ async def _run_tick_locked(db: Session, world_id: int, lease_token=None) -> Tick
             recent_canon=recent_canon, chapter_events=script_dsl.format_events_for_prompt(events),
             players_status=players_status, actions_summary=actions_summary,
         )
+        wu = WorldOutput.model_validate(wu).model_dump()
+        if wu["world_ended"] and day < total_days:
+            raise ValueError("模型不能提前结束世界")
     except Exception as exc:
-        raise TickError(f"导演生成失败: {exc}") from exc
+        raise TickError("导演输出未通过验收，世界未推进") from exc
 
     generated = []
     for player in player_inputs:
@@ -118,11 +126,13 @@ async def _run_tick_locked(db: Session, world_id: int, lease_token=None) -> Tick
                 script=content, character_card=player["card"], day=day, total_days=total_days,
                 world_broadcast=wu["public_broadcast"], chapter_goal=(chapter or {}).get("goal", ""),
                 player_private_state=player["state_text"], player_recent_history=player["recent"],
-                player_today_actions="；".join(a["text"] for a in action_inputs if a["user_id"] == player["user_id"]),
+                player_today_actions="；".join(safe_summary(a["intent"]) for a in action_inputs
+                                             if a["user_id"] == player["user_id"] and safe_summary(a["intent"])),
                 player_data=player["data"],
             )
+            scene = validate_scene(scene, content, player["state"], day)
         except Exception:
-            logger.exception("玩家 %s 第 %s 天场景生成失败", player["user_id"], day)
+            logger.warning("玩家 %s 第 %s 天场景生成或验收失败，使用无状态变化回执", player["user_id"], day)
             scene = copy.deepcopy(FALLBACK_SCENE)
             scene["narrative"] = f"【第{day}天】{scene['narrative']}"
         generated.append((player, scene))

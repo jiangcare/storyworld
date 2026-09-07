@@ -5,6 +5,7 @@ import json
 import logging
 
 from . import prompts, schemas
+from .outputs import SceneOutput, public_script
 from .client import client
 
 logger = logging.getLogger(__name__)
@@ -23,8 +24,6 @@ async def generate_scene(
     player_data: str = "",
 ) -> dict:
     system = prompts.WRITER_SYSTEM_TEMPLATE.format(
-        script_json=json.dumps(script, ensure_ascii=False),
-        character_card=json.dumps(character_card, ensure_ascii=False),
         schema=prompts._schema_hint(schemas.WRITER_OUTPUT_SCHEMA),
     )
     user = prompts.writer_user_prompt(
@@ -37,41 +36,10 @@ async def generate_scene(
         player_today_actions=player_today_actions,
         player_data=player_data,
     )
+    user = json.dumps({"script": public_script(script), "character_card": character_card, "game_context": user}, ensure_ascii=False)
     data = await client.chat_json(system, user, max_tokens=2200)
     return _coerce(data)
 
 
 def _coerce(data: dict) -> dict:
-    def s(key: str, default: str = "") -> str:
-        v = data.get(key)
-        return v if isinstance(v, str) else default
-
-    def sl(key: str) -> list:
-        v = data.get(key)
-        return v if isinstance(v, list) else []
-
-    sc = data.get("state_changes") or {}
-    if not isinstance(sc, dict):
-        sc = {}
-    notes = sc.get("notes") or {}
-    if not isinstance(notes, dict):
-        notes = {}
-    flags = sc.get("flag_set") or {}
-    if not isinstance(flags, dict):
-        flags = {}
-
-    return {
-        "narrative": s("narrative", "（你度过了平静的一天。）"),
-        "suggested_actions": sl("suggested_actions")[:4],
-        "state_changes": {
-            "hp_delta": int(sc.get("hp_delta", 0) or 0),
-            "items_added": sl("items_added"),
-            "items_removed": sl("items_removed"),
-            "clues_added": [str(x) for x in sl("clues_added")],
-            "abilities_added": [str(x) for x in sl("abilities_added")],
-            "tasks_done": [str(x) for x in sl("tasks_done")],
-            "flag_set": {str(k): v for k, v in flags.items()},
-            "notes": {str(k): str(v) for k, v in notes.items()},
-        },
-        "scene_ended": bool(data.get("scene_ended", False)),
-    }
+    return SceneOutput.model_validate(data).model_dump()
