@@ -197,6 +197,8 @@ from app.engine.lighthouse import realtime_edition
 LEGACY_LIGHTHOUSE = copy.deepcopy(SEED_SCRIPTS[1])
 SEED_SCRIPTS[1] = realtime_edition(LEGACY_LIGHTHOUSE)
 SEED_SCRIPTS.append(SEED_DEMO)
+from app.engine.cultivation_story import SEED_CULTIVATION
+SEED_SCRIPTS.append(SEED_CULTIVATION)
 
 
 def seed() -> None:

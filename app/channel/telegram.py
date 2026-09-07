@@ -47,7 +47,7 @@ class TelegramChannel(Channel):
         self, chat_id: int, text: str, actions: Sequence[Action]
     ) -> Optional[int]:
         b = InlineKeyboardBuilder()
-        for a in actions[:12]:
+        for a in actions[:24]:
             if len(a.payload) > 64:
                 logger.warning("[telegram] 按钮 payload 超长已跳过: %s", a.payload)
                 continue

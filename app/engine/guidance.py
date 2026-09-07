@@ -39,7 +39,8 @@ def objective(content, day=1):
 
 
 def options(content, state, progress):
-    from .narrative import matches
+    from .narrative import matches, action_cost
+    from . import cultivation
     spec = parse_spec(content)
     if progress["ending"] or state["hp"] <= 0:
         return []
@@ -47,7 +48,16 @@ def options(content, state, progress):
     for key, interaction in spec.interactions.items():
         if (interaction.once and key in progress["done"]) or not matches(interaction.requires, state, progress):
             continue
-        if any(state["inventory"].get(k, 0) < q for k, q in interaction.cost.items()):
+        cost = action_cost(interaction, state)
+        if spec.sandbox:
+            # 保留尚买不起的养成选项，清楚显示材料和修为要求，避免玩家看不到玩法。
+            names = {item["id"]: item["name"] for item in content["items"]}
+            hint = cultivation.details(interaction.cultivation_action, state)
+            price = "、".join(f"{names[k]}×{q}" for k, q in cost.items())
+            label = f"{interaction.label}（{interaction.minutes}分钟" + (f"；消耗{price}" if price else "") + (f"；{hint}" if hint else "") + "）"
+            safe.append({"kind": "interact", "target": key, "label": label})
+            continue
+        if any(state["inventory"].get(k, 0) < q for k, q in cost.items()):
             continue
         label = f"{interaction.label}（{interaction.minutes}分钟" + ("，有失败风险）" if interaction.check else "）")
         (risky if interaction.check else safe).append({"kind": "interact", "target": key, "label": label})
@@ -60,20 +70,29 @@ def options(content, state, progress):
     exits = spec.locations[state["location"]].exits
     moves = [{"kind": "move", "target": key, "label": f"去{spec.locations[key].name}（{exits[key]}分钟）"}
              for key in sorted(exits, key=destination_priority)]
-    choices = (safe + moves + risky)[:5]
+    choices = safe + moves + risky if spec.sandbox else (safe + moves + risky)[:5]
+    if spec.sandbox and state["hp"] < state["max_hp"]:
+        choices.append({"kind": "rest", "target": "", "label": "调息恢复2气血（15分钟，无物品消耗）"})
     choices.append({"kind": "look", "target": "", "label": "观察当前环境（不耗时）"})
     return choices
 
 
 def render(world, player, choices, *, explain=False):
+    from . import cultivation
     content = world.script.content_json
     progress = world.progress_json["narrative"]
     if progress["ending"]:
         return "本次旅程已结束。用 /resume 重读结局，或 /scripts 开始新的故事。"
-    lines = [f"🎯 当前目标：{objective(content, world.day)}"]
+    sandbox = cultivation.enabled(content)
+    lines = ["🌄 自由修行 · 岁月无尽" if sandbox else f"🎯 当前目标：{objective(content, world.day)}"]
+    if sandbox:
+        loc = content["narrative"]["locations"][player.private_state["location"]]["name"]
+        lines.append(f"📍 {loc} · {cultivation.realm(player.private_state['cultivation']['rank'])}")
     if progress["revision"] <= 1 and world.progress_json.get("legacy_daily"):
         lines.append("已衔接到即时探索版。此前待结算的输入保留在历史中，接下来的探索会当场返回结果。")
-    if explain:
+    if explain and sandbox:
+        lines.append(cultivation.HELP)
+    elif explain:
         lines += [content.get("world", {}).get("background", ""),
                   "你扮演故事里的角色：探索、寻找线索，再决定怎么行动。",
                   "问玩法、查看状态和观察不耗时；移动和交互会消耗标注的分钟。/continue 会等待5分钟，关键事件暂停时需先作决定。"]

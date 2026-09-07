@@ -34,6 +34,7 @@ class Location(Spec):
 
 
 class Interaction(Spec):
+    cultivation_action: Optional[Literal["meditate", "breakthrough", "pill", "heal", "gather", "mine", "alchemy", "forge", "hunt", "ruins", "cave"]] = None
     aliases: list[str] = Field(default_factory=list, max_length=30)
     repeat_text: str = Field(default="", max_length=1000)
     verbatim: bool = False
@@ -59,6 +60,7 @@ class Anchor(Spec):
 
 class NarrativeSpec(Spec):
     version: Literal[2] = 2
+    sandbox: Optional[Literal["cultivation"]] = None
     start: str
     opening: str = Field(min_length=1, max_length=2000)
     locations: dict[str, Location] = Field(min_length=1, max_length=100)
@@ -88,6 +90,13 @@ class NarrativeSpec(Spec):
             raise ValueError("初始物品和消耗数量必须为 1-999")
         effects = [a.effect for a in self.anchors.values()]
         effects += [e for i in self.interactions.values() for e in (i.success, i.failure)]
+        if self.sandbox:
+            if self.anchors or any(e.ending for e in effects):
+                raise ValueError("修仙沙盒不允许强制剧情锚点或结局")
+            if any(i.once or i.check for i in self.interactions.values()):
+                raise ValueError("修仙沙盒交互必须可重复，检定由修仙规则统一处理")
+        elif any(i.cultivation_action for i in self.interactions.values()):
+            raise ValueError("修仙动作仅能用于 cultivation 沙盒")
         for effect in effects:
             if any(abs(q) > 999 for q in effect.items.values()):
                 raise ValueError("物品变化超限")
@@ -102,6 +111,8 @@ def parse_spec(content: dict) -> NarrativeSpec:
     spec = NarrativeSpec.model_validate(content["narrative"])
     checks = (content.get("rules") or {}).get("checks", {})
     item_ids = {i["id"] for i in content.get("items", [])}
+    if spec.sandbox and not {"stone", "herb", "ore", "qi_pill", "heal_pill", "talisman"} <= item_ids:
+        raise ValueError("修仙沙盒缺少基础物品模板")
     npc_ids = {n["id"] for n in content.get("npcs", [])}
     for interaction in spec.interactions.values():
         if interaction.check and interaction.check not in checks:

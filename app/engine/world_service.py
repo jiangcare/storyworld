@@ -224,11 +224,11 @@ async def record_action(
     except InputRejected as exc:
         return False, str(exc)
 
+    if narrative.enabled(world.script.content_json):
+        return await narrative.take_turn(db, world, player, text)
     social = social_reply(text)
     if social:
         return True, social
-    if narrative.enabled(world.script.content_json):
-        return await narrative.take_turn(db, world, player, text)
 
     from . import guidance
     if guidance.is_location_question(text):
@@ -423,6 +423,17 @@ def build_player_status_message(player: WorldPlayer, world: World, content: dict
         spec = narrative.parse_spec(content)
         progress = world.progress_json["narrative"]
         names = {n["id"]: n["name"] for n in content.get("npcs", [])}
+        if spec.sandbox:
+            from . import cultivation
+            return "\n".join([
+                f"🧭 世界：{world.title} · 自由修行",
+                f"🧬 角色：{player.character_name} · " + ("青岚宗外门弟子" if progress["flags"].get("sect_member") else "散修"),
+                f"📍 {spec.locations[s['location']].name} · 第 {world.day} 天 · 已过 {progress['minute']} 分钟",
+                cultivation.status(s),
+                "🎒 储物袋：" + ("、".join(s.get("items", [])) or "暂无物品"),
+                "🤝 人情：" + ("、".join(f"{names.get(k, k)} {v:+d}" for k, v in s.get("relationships", {}).items()) or "尚未结交"),
+                "输入“地图”“丹方”或自由描述行动。💾 已自动保存，/resume 继续修行。",
+            ])
         return "\n".join([
             f"🧭 世界：{world.title}",
             f"🎯 目标：{narrative.guidance.objective(content, world.day)}",

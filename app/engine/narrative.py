@@ -18,7 +18,7 @@ from ..db import begin_write
 from ..models import PlayerAction, World, WorldPlayer
 from ..rules import engine as rules
 from .narrative_dsl import Condition, Effect, parse_spec
-from . import guidance
+from . import guidance, cultivation
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,8 @@ def initialize(world, player, content):
         "inventory": dict(spec.inventory), "xp": 0, "level": 1,
         "stats": dict(player.character_card.get("stats", rules.DEFAULT_ATTRS)),
     }
+    if spec.sandbox:
+        cultivation.initialize(player.private_state)
     sync_items(player.private_state, content)
 
 
@@ -83,7 +85,16 @@ def context_for(content, state, progress):
         "interactions": {k: v.label for k, v in spec.interactions.items() if k not in progress["done"]},
         "player": copy.deepcopy(state), "minute": progress["minute"],
         "paused": progress["paused"],
+        "play_style": cultivation.HELP if spec.sandbox else "探索剧情，按玩家意愿行动",
     }
+
+
+def action_cost(interaction, state):
+    cost = dict(interaction.cost)
+    if interaction.cultivation_action:
+        for key, amount in cultivation.costs(interaction.cultivation_action, state).items():
+            cost[key] = cost.get(key, 0) + amount
+    return cost
 
 
 def evaluate(content, state, progress, plan: ai.Plan, rng=None):
@@ -111,15 +122,21 @@ def evaluate(content, state, progress, plan: ai.Plan, rng=None):
                 result["text"] = f"你抵达{spec.locations[action.target].name}。{spec.locations[action.target].description}"
         elif action.kind == "interact":
             interaction = spec.interactions.get(action.target)
+            cost = action_cost(interaction, state) if interaction else {}
             if interaction is None or action.target in progress["done"]:
                 result.update(ok=False, text="这件事当前无法再次执行。")
             elif not matches(interaction.requires, state, progress):
                 result.update(ok=False, text="当前地点、线索或物品还不满足这个行动的条件。")
-            elif any(state["inventory"].get(k, 0) < q for k, q in interaction.cost.items()):
+                if spec.sandbox and interaction.requires.location and interaction.requires.location != state["location"]:
+                    place = spec.locations[interaction.requires.location].name
+                    result["text"] = f"{interaction.label}需要在{place}进行。可以先输入‘地图’查看路线。"
+            elif interaction.cultivation_action and cultivation.unavailable(interaction.cultivation_action, state):
+                result.update(ok=False, text=cultivation.unavailable(interaction.cultivation_action, state))
+            elif any(state["inventory"].get(k, 0) < q for k, q in cost.items()):
                 result.update(ok=False, text="随身物品不足，无法执行这个行动。")
             else:
                 minutes = interaction.minutes
-                for item, qty in interaction.cost.items():
+                for item, qty in cost.items():
                     state["inventory"][item] -= qty
                 success = True
                 if interaction.check:
@@ -130,6 +147,14 @@ def evaluate(content, state, progress, plan: ai.Plan, rng=None):
                     result["check"] = {"name": interaction.check, "chance": chance, "success": success}
                 apply_effect(interaction.success if success else interaction.failure, state, progress)
                 result.update(ok=success, text=interaction.success_text if success else interaction.failure_text)
+                if interaction.cultivation_action:
+                    success, text = cultivation.resolve(interaction.cultivation_action, state, progress, rng)
+                    result.update(ok=success, text=text)
+                if spec.sandbox:
+                    state["level"] = state["cultivation"]["rank"] + 1
+                    if cost:
+                        names = {i["id"]: i["name"] for i in content["items"]}
+                        result["text"] += "\n消耗：" + "、".join(f"{names[k]} ×{q}" for k, q in cost.items())
                 if success and interaction.once:
                     progress["done"].append(action.target)
         elif action.kind == "look":
@@ -164,6 +189,9 @@ def evaluate(content, state, progress, plan: ai.Plan, rng=None):
                     progress["paused"] = key
                     break
         if state["hp"] <= 0:
+            if spec.sandbox:
+                results.append(cultivation.revive(state, progress, spec.start))
+                break  # 复活改变了位置，不再执行玩家在身陨前提交的后续动作。
             progress["ending"] = progress["ending"] or "你的生命归零，这次旅程结束了。"
         if progress["ending"]:
             progress["paused"] = None
@@ -174,6 +202,8 @@ def evaluate(content, state, progress, plan: ai.Plan, rng=None):
                "hp": state["hp"], "inventory": state["inventory"], "xp": state["xp"],
                "relationships": state["relationships"], "paused": progress["paused"],
                "ending": progress["ending"]}
+    if spec.sandbox:
+        receipt["cultivation"] = cultivation.status(state)
     return state, progress, receipt
 
 
@@ -185,6 +215,8 @@ def format_receipt(receipt):
             line += f"（成功率 {result['check']['chance']:.0%}，{'成功' if result['check']['success'] else '失败'}）"
         lines.append(line)
     lines.append(f"⏱ 已过 {receipt['minute']} 分钟 · 生命 {receipt['hp']} · 已自动保存")
+    if receipt.get("cultivation"):
+        lines.append(receipt["cultivation"])
     if receipt["ending"]:
         lines.append(f"🏁 {receipt['ending']}")
     elif receipt["paused"]:
@@ -197,7 +229,7 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
         check_player_input(text)
     except InputRejected as exc:
         return False, str(exc)
-    social = social_reply(text)
+    social = (cultivation.social(text) if cultivation.enabled(world.script.content_json) else None) or social_reply(text)
     if social:
         return True, social
     if guidance.is_location_question(text):
@@ -205,13 +237,28 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
         loc = spec.locations[player.private_state["location"]]
         return True, f"你现在在{loc.name}，扮演{player.character_name}（{player.character_role}）。\n{loc.description}"
     if guidance.is_help(text):
+        if cultivation.enabled(world.script.content_json):
+            return True, cultivation.HELP
         return True, "你可以探索环境、寻找线索，并决定角色的行动。查看引导不会推进时间。"
     world_id, player_id, user_id = world.id, player.id, player.user_id
     content = copy.deepcopy(world.script.content_json)
     explicit = None
     clean = normalized(text).strip().rstrip("?？!！。.")
+    if cultivation.enabled(content):
+        reply = cultivation.query(text, content, player.private_state)
+        if reply:
+            return True, reply + "\n查看这些信息不消耗游戏时间。"
+        for key, loc in parse_spec(content).locations.items():
+            if clean in ("去" + loc.name, "前往" + loc.name, "走到" + loc.name):
+                explicit = ai.Plan(actions=[ai.Action(kind="move", target=key)])
+                break
+        if clean in ("休息", "调息", "休息恢复"):
+            explicit = ai.Plan(actions=[ai.Action(kind="rest")])
     for key, interaction in parse_spec(content).interactions.items():
-        if clean not in interaction.aliases or not matches(interaction.requires, player.private_state, world.progress_json["narrative"]):
+        aliases = interaction.aliases + ([interaction.label] if cultivation.enabled(content) else [])
+        if clean not in aliases:
+            continue
+        if not cultivation.enabled(content) and not matches(interaction.requires, player.private_state, world.progress_json["narrative"]):
             continue
         if key in world.progress_json["narrative"]["done"] and interaction.repeat_text:
             return True, interaction.repeat_text + "\n这条线索已经记录，重读不消耗时间。"
@@ -280,7 +327,7 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
         logger.exception("单人事务未提交")
         return False, "本次行动未能保存，世界未改变，请重试。"
 
-    if (len(plan.actions) == 1 and plan.actions[0].kind == "interact"
+    if cultivation.enabled(content) or (len(plan.actions) == 1 and plan.actions[0].kind == "interact"
             and parse_spec(content).interactions.get(plan.actions[0].target)
             and parse_spec(content).interactions[plan.actions[0].target].verbatim):
         return True, fallback
