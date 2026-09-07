@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     # Telegram
     telegram_bot_token: str = ""
+    telegram_proxy: str = ""
 
     # DeepSeek (OpenAI 兼容)
     ai_backend: Literal["harness", "direct"] = "harness"
@@ -26,6 +27,9 @@ class Settings(BaseSettings):
 
     # 相对路径始终以项目根目录为基准，独立启动 Web/Bot/后台也共享同一存档。
     database_url: str = "sqlite:///data/storyworld.db"
+
+    # 服务监听地址（0.0.0.0 = 局域网可访问；127.0.0.1 = 仅本机）
+    bind_host: str = "0.0.0.0"
 
     # 后台管理
     admin_username: str = "admin"

@@ -6,7 +6,9 @@ import logging
 
 import uvicorn
 
+from app.config import settings
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
 if __name__ == "__main__":
-    uvicorn.run("app.web.main:app", host="127.0.0.1", port=8081)
+    uvicorn.run("app.web.main:app", host=settings.bind_host, port=8081)

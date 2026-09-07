@@ -31,7 +31,13 @@ async def run() -> None:
         from aiogram import Bot, Dispatcher
         from app.channel.telegram import TelegramChannel
 
-        bot = Bot(token=settings.telegram_bot_token)
+        if settings.telegram_proxy:
+            from aiogram.client.session.aiohttp import AiohttpSession
+
+            _session = AiohttpSession(proxy=settings.telegram_proxy)
+            bot = Bot(token=settings.telegram_bot_token, session=_session)
+        else:
+            bot = Bot(token=settings.telegram_bot_token)
         tg = TelegramChannel(bot)
         channels.append(tg)
         dp = Dispatcher()
@@ -65,12 +71,12 @@ async def run() -> None:
                 [c.capabilities.name for c in channels])
 
     # ---- Web 服务 ----
-    web_server = Server(Config("app.web.main:app", host="127.0.0.1", port=8081, log_level="warning"))
+    web_server = Server(Config("app.web.main:app", host=settings.bind_host, port=8081, log_level="warning"))
     web_task = asyncio.create_task(web_server.serve())
     logger.info("Web 通道: http://127.0.0.1:8081/web")
 
     # ---- 后台管理 ----
-    admin_server = Server(Config("app.admin.main:app", host="127.0.0.1", port=8080, log_level="warning"))
+    admin_server = Server(Config("app.admin.main:app", host=settings.bind_host, port=8080, log_level="warning"))
     admin_task = asyncio.create_task(admin_server.serve())
     logger.info("后台管理: http://127.0.0.1:8080  (默认 admin/admin123)")
 

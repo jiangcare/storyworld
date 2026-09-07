@@ -19,7 +19,13 @@ async def main() -> None:
         raise SystemExit("缺少 TELEGRAM_BOT_TOKEN，请配置 .env 后重试。")
 
     init_db()
-    bot = Bot(token=settings.telegram_bot_token)
+    if settings.telegram_proxy:
+        from aiogram.client.session.aiohttp import AiohttpSession
+
+        _session = AiohttpSession(proxy=settings.telegram_proxy)
+        bot = Bot(token=settings.telegram_bot_token, session=_session)
+    else:
+        bot = Bot(token=settings.telegram_bot_token)
 
     # 通道抽象：Telegram 只是第一个接入的通道
     channel = TelegramChannel(bot)

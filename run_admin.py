@@ -7,5 +7,7 @@
 """
 import uvicorn
 
+from app.config import settings
+
 if __name__ == "__main__":
-    uvicorn.run("app.admin.main:app", host="127.0.0.1", port=8080)
+    uvicorn.run("app.admin.main:app", host=settings.bind_host, port=8080)
