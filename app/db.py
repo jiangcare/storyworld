@@ -1,20 +1,47 @@
-"""数据库与 Redis 封装。"""
+"""SQLite 数据库：WAL、外键、短写事务和持久化本地会话。"""
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-import redis.asyncio as aioredis
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from .config import settings
 
-engine = create_engine(
-    settings.mysql_dsn,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-    echo=settings.debug,
-)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def create_db_engine(database_url: str):
+    url = make_url(database_url)
+    if url.drivername not in ("sqlite", "sqlite+pysqlite") or url.query:
+        raise ValueError("DATABASE_URL 需为 SQLite 文件地址，例如 sqlite:///data/storyworld.db")
+    memory = url.database in (None, "", ":memory:")
+    if not memory:
+        path = Path(url.database).expanduser()
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        url = url.set(database=str(path.resolve()))
+    options = {"poolclass": StaticPool} if memory else {}
+    result = create_engine(url, connect_args={"check_same_thread": False, "timeout": 10},
+                           echo=settings.debug, **options)
+
+    @event.listens_for(result, "connect")
+    def configure(connection, _record):
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=10000")
+        if not memory:
+            cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.close()
+
+    return result
+
+
+engine = create_db_engine(settings.database_url)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
@@ -27,7 +54,10 @@ def init_db() -> None:
     """建表（幂等）。"""
     from . import models  # noqa: F401  确保模型注册
 
-    Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        conn.exec_driver_sql("BEGIN IMMEDIATE")
+        Base.metadata.create_all(bind=conn)
+        conn.commit()
 
 
 def get_db():
@@ -51,19 +81,12 @@ async def session_scope():
         db.close()
 
 
-# ---- Redis ----
-_redis: aioredis.Redis | None = None
+def begin_write(db) -> None:
+    """在任何读/改之前获取 SQLite 写保留锁。调用方负责提交/回滚，锁内禁止 await。"""
+    db.connection().exec_driver_sql("BEGIN IMMEDIATE")
 
 
-async def get_redis() -> aioredis.Redis:
-    global _redis
-    if _redis is None:
-        _redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-    return _redis
+async def get_store():
+    from .local_store import LocalStore
 
-
-async def close_redis() -> None:
-    global _redis
-    if _redis is not None:
-        await _redis.aclose()
-        _redis = None
+    return LocalStore(engine)

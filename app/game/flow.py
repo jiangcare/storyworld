@@ -8,15 +8,15 @@ from ..ai import script_ai
 from ..channel.base import Channel
 from ..channel.types import Action, ChannelEvent, parse_command
 from ..config import settings
-from ..db import SessionLocal, get_redis
-from ..engine import world_service
-from ..models import Scene, Script, World
+from ..db import SessionLocal, get_store
+from ..engine import narrative, world_service
+from ..models import Scene, Script, World, WorldPlayer
 
 logger = logging.getLogger(__name__)
 
 HELP_TEXT = """🎮 StoryWorld · AI 互动小说世界
 
-玩法：剧本创建世界 → 继承角色 → 每天固定时间自动推送剧情 → 用文字行动，AI 实时接戏 → 次日剧情结算你的行动。
+玩法：创建世界 → 继承角色 → 用文字自由行动。即时单人剧本当场执行并自动保存；旧版剧本每天结算。
 
 命令：
 /scripts 浏览可用剧本
@@ -26,6 +26,8 @@ HELP_TEXT = """🎮 StoryWorld · AI 互动小说世界
 /act <你的行动> 执行行动（群内也可直接回复机器人消息）
 /status 查看角色状态
 /log 前情提要
+/continue 继续观察世界（关键节点暂停）
+/resume 恢复最近的旅程、查看状态与上一段剧情
 /upload <剧本草稿> 上传你自己的剧本，AI 帮你完善后提交审核
 
 提示：多人局建议在私聊里行动（保密），群里会广播世界公开事件。"""
@@ -149,6 +151,8 @@ class GameFlow:
                 await self._cmd_status(ev, db)
             elif cmd == "log":
                 await self._cmd_log(ev, db)
+            elif cmd in ("continue", "resume"):
+                await self._cmd_narrative(ev, db, cmd)
             elif cmd == "upload":
                 await self._cmd_upload(ev, db, arg)
             else:
@@ -250,6 +254,34 @@ class GameFlow:
             parts += ["—— 你的经历 ——", mine]
         await _ch(ev).send(ev.chat_id, "\n".join(parts))
 
+    async def _cmd_narrative(self, ev: ChannelEvent, db, cmd: str) -> None:
+        user = world_service.get_or_create_user(
+            db, ev.user_id, platform=ev.platform,
+            username=ev.username, display_name=ev.display_name,
+        )
+        query = db.query(World).join(WorldPlayer).filter(
+            WorldPlayer.user_id == user.id,
+            World.status.in_(("running", "finished")),
+        )
+        if not ev.is_private:
+            query = query.filter(World.chat_id == ev.chat_id)
+        world = query.order_by(World.id.desc()).first()
+        if world is None:
+            await _ch(ev).send(ev.chat_id, "暂无存档，用 /scripts 开始旅程。")
+            return
+        player = world_service.get_player(db, world, user.id)
+        if cmd == "resume":
+            text = world_service.build_player_status_message(player, world, world.script.content_json)
+            recent = world_service.build_player_recent(db, world, player, limit=1)
+            if not recent and narrative.enabled(world.script.content_json):
+                recent = world.script.content_json["narrative"]["opening"]
+            await _ch(ev).send(ev.chat_id, text + "\n\n" + recent)
+        elif narrative.enabled(world.script.content_json):
+            _, text = await narrative.take_turn(db, world, player, "继续观察", advance=True)
+            await _ch(ev).send(ev.chat_id, text)
+        else:
+            await _ch(ev).send(ev.chat_id, "这个剧本按每日节奏推进。可用 /log 重读剧情，或用 /scripts 选择即时单人体验。")
+
     async def _cmd_upload(self, ev: ChannelEvent, db, draft: str) -> None:
         if not draft:
             await _ch(ev).send(
@@ -261,7 +293,7 @@ class GameFlow:
             await _ch(ev).send(ev.chat_id, "草稿太长了（最多3000字）。")
             return
         key = f"draft:{ev.platform}:{ev.user_id}:{int(time.time())}"
-        r = await get_redis()
+        r = await get_store()
         await r.set(key, draft, ex=1800)
         await _ch(ev).send(
             ev.chat_id,
@@ -343,6 +375,15 @@ class GameFlow:
             if script.mode == "single":
                 world_service.start_world(db, world)
                 await _ch(ev).ack(ev, "世界已创建！")
+                if narrative.enabled(script.content_json):
+                    await _ch(ev).send(
+                        ev.chat_id,
+                        f"🌍 单人世界【{world.title}】已开始！\n"
+                        f"你是{world.players[0].character_name}。\n\n"
+                        + script.content_json["narrative"]["opening"]
+                        + "\n\n每次行动自动保存；/status 查看角色，/resume 恢复旅程。",
+                    )
+                    return
                 await _ch(ev).send(
                     ev.chat_id,
                     f"🌍 单人世界【{world.title}】已创建并开始！\n"
@@ -405,7 +446,7 @@ class GameFlow:
         except ValueError:
             await _ch(ev).ack(ev, "操作无效。", alert=True)
             return
-        r = await get_redis()
+        r = await get_store()
         draft = await r.get(key)
         if not draft:
             await _ch(ev).ack(ev, "草稿已过期，请重新 /upload。", alert=True)

@@ -1,23 +1,15 @@
-"""离线冒烟测试：SQLite + FakeRedis + Mock LLM 验证全链路（无需 MySQL/Redis/API Key）。
+"""离线冒烟测试：SQLite 文件库 + Mock LLM 验证全链路（无需 外部服务/API Key）。
 
 用法：.venv\\Scripts\\python.exe -X utf8 smoke_test.py
 """
 import asyncio
 import sys
 
-# ---- 1. 打补丁：SQLite 内存库 + FakeRedis（必须在导入 app.db 业务模块前） ----
-import fakeredis
+# ---- 1. 打补丁：SQLite 临时文件库（必须在导入 app.db 业务模块前） ----
 import app.db as dbmod
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from tests.support import use_test_database
 
-dbmod.engine = create_engine(
-    "sqlite:///:memory:", connect_args={"check_same_thread": False}
-)
-dbmod.SessionLocal = sessionmaker(
-    bind=dbmod.engine, autoflush=False, expire_on_commit=False
-)
-dbmod._redis = fakeredis.FakeAsyncRedis(decode_responses=True)
+use_test_database()
 
 # ---- 2. Mock LLM ----
 import app.ai.director as director_mod

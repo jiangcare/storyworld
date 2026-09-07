@@ -1,4 +1,4 @@
-"""StoryWorld 后台管理系统（FastAPI + Jinja2 + Redis 会话）。
+"""StoryWorld 后台管理系统（FastAPI + Jinja2 + SQLite 会话）。
 
 提供登录鉴权、仪表盘、剧本管理、世界管理与用户管理界面。
 """
@@ -18,7 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from ..config import settings
-from ..db import SessionLocal, close_redis, init_db
+from ..db import SessionLocal, init_db
 from ..engine.script_dsl import validate_script
 from ..engine.tick import run_tick
 from ..models import AdminUser, CanonEvent, Scene, Script, User, World, WorldPlayer
@@ -230,7 +230,7 @@ async def require_admin(request: Request) -> str:
     token = request.cookies.get("session")
     try:
         username = await auth.get_session_username(token)
-    except Exception:  # noqa: BLE001  Redis 异常按未登录处理
+    except Exception:  # noqa: BLE001  存储异常按未登录处理
         username = None
     if not username:
         raise HTTPException(status_code=303, headers={"Location": "/admin/login"})
@@ -260,7 +260,6 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
     yield
-    await close_redis()
 
 
 app = FastAPI(title="StoryWorld 管理后台", lifespan=lifespan)
@@ -301,7 +300,7 @@ async def login_submit(
         return _render(
             request,
             "login.html",
-            {"error": "会话服务暂不可用（Redis 连接失败），请稍后再试", "username": username},
+            {"error": "会话服务暂不可用（本地数据库访问失败），请稍后再试", "username": username},
             status_code=500,
         )
     resp = RedirectResponse("/admin", status_code=303)
@@ -740,7 +739,7 @@ async def world_tick(request: Request, world_id: int, username: str = Depends(re
         world = db.get(World, world_id)
         if world is None:
             return _redirect("/admin/worlds", err="世界不存在")
-        # run_tick 是 async 函数（内部使用 async Redis / AI），直接 await 即可
+        # run_tick 是 async 函数（内部使用 本地存储 / AI），直接 await 即可
         result = await run_tick(db, world_id)
         if result is None:
             return _redirect("/admin/worlds", err="未推进：世界不在进行中或 tick 正在进行中")

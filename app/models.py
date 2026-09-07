@@ -1,4 +1,4 @@
-"""SQLAlchemy 数据模型（MySQL）。"""
+"""SQLAlchemy 数据模型（SQLite）。"""
 from datetime import datetime
 from typing import Optional
 
@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Float,
     Index,
     Integer,
     JSON,
@@ -20,6 +21,15 @@ from .db import Base
 
 def now() -> datetime:
     return datetime.now()
+
+
+class RuntimeEntry(Base):
+    """带过期时间的会话、草稿和租约；与游戏存档保存在同一个 SQLite 文件。"""
+
+    __tablename__ = "runtime_entries"
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+    expires_at: Mapped[Optional[float]] = mapped_column(Float, nullable=True, index=True)
 
 
 class User(Base):

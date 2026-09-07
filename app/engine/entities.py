@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Optional
 
@@ -83,7 +84,7 @@ def grant_item(
     db.add(row)
     db.flush()
     # 同步缓存（private_state.items 名称列表，兼容旧读取）
-    cache = wp.private_state or {}
+    cache = copy.deepcopy(wp.private_state or {})
     names = list(cache.get("items") or [])
     if row.name not in names:
         names.append(row.name)
@@ -119,7 +120,7 @@ def remove_item(
         if row.quantity <= 0:
             db.delete(row)
     if removed:
-        cache = wp.private_state or {}
+        cache = copy.deepcopy(wp.private_state or {})
         cache["items"] = list(cache.get("items") or [])
         db.flush()
     return removed
@@ -245,7 +246,7 @@ def create_task(
     )
     db.add(row)
     db.flush()
-    prog = world.progress_json or {}
+    prog = copy.deepcopy(world.progress_json or {})
     prog.setdefault("spawned", {})["tasks"] = int(prog.get("spawned", {}).get("tasks", 0)) + 1
     world.progress_json = prog
     return row
@@ -269,7 +270,7 @@ def complete_task_by_title(db: Session, world_id: int, wp: Optional[WorldPlayer]
     if row is None:
         return False
     row.status = "done"
-    prog = row.progress_json or {}
+    prog = copy.deepcopy(row.progress_json or {})
     prog["current"] = prog.get("target", 1)
     row.progress_json = prog
     db.flush()
@@ -305,7 +306,7 @@ def world_progress(world: World) -> dict:
 
 
 def set_flag(world: World, key: str, value=True) -> None:
-    prog = world.progress_json or {}
+    prog = copy.deepcopy(world.progress_json or {})
     prog.setdefault("flags", {})[key] = value
     world.progress_json = prog
 
@@ -315,7 +316,7 @@ def has_flag(world: World, key: str) -> bool:
 
 
 def inc_counter(world: World, key: str, delta: int = 1) -> int:
-    prog = world.progress_json or {}
+    prog = copy.deepcopy(world.progress_json or {})
     counters = prog.setdefault("counters", {})
     v = int(counters.get(key, 0)) + delta
     counters[key] = v
@@ -328,7 +329,7 @@ def advance_mainline(world: World, content: dict) -> Optional[dict]:
     beats = content.get("mainline") or []
     if not beats:
         return None
-    prog = world.progress_json or {}
+    prog = copy.deepcopy(world.progress_json or {})
     idx = int(prog.get("mainline", {}).get("beat_index", -1))
     prog.setdefault("mainline", {})["beat_index"] = min(idx + 1, len(beats) - 1)
     world.progress_json = prog

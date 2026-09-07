@@ -17,11 +17,7 @@ class LLMError(Exception):
 
 class LLMClient:
     def __init__(self) -> None:
-        self._client = AsyncOpenAI(
-            api_key=settings.deepseek_api_key,
-            base_url=settings.deepseek_base_url,
-            timeout=settings.llm_timeout,
-        )
+        self._client = None
 
     async def chat_json(
         self,
@@ -33,6 +29,14 @@ class LLMClient:
         retries: int = 2,
     ) -> dict:
         """调用模型并要求返回 JSON 对象（response_format=json_object）。"""
+        if self._client is None:
+            if not settings.deepseek_api_key:
+                raise LLMError("尚未配置 DEEPSEEK_API_KEY")
+            self._client = AsyncOpenAI(
+                api_key=settings.deepseek_api_key,
+                base_url=settings.deepseek_base_url,
+                timeout=settings.llm_timeout,
+            )
         last_err: Exception | None = None
         for attempt in range(retries + 1):
             try:

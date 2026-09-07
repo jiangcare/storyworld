@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from ..channel.types import parse_command
-from ..db import SessionLocal, get_redis, init_db
+from ..db import SessionLocal, get_store, init_db
 from ..game.flow import GameFlow, get_flow
 from ..models import User, WebMessage, WebRoom, WebRoomMember
 from .channel import WebChannel
@@ -49,7 +49,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 async def _create_session(user_id: int) -> str:
     token = secrets.token_hex(16)
-    r = await get_redis()
+    r = await get_store()
     await r.set(f"web_session:{token}", user_id, ex=SESSION_TTL)
     return token
 
@@ -57,7 +57,7 @@ async def _create_session(user_id: int) -> str:
 async def _session_user_id(token: Optional[str]) -> Optional[int]:
     if not token:
         return None
-    r = await get_redis()
+    r = await get_store()
     raw = await r.get(f"web_session:{token}")
     return int(raw) if raw else None
 
@@ -156,7 +156,7 @@ async def api_logout(token: Optional[str] = Cookie(None, alias=SESSION_COOKIE)):
     from fastapi.responses import JSONResponse
 
     if token:
-        r = await get_redis()
+        r = await get_store()
         await r.delete(f"web_session:{token}")
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(SESSION_COOKIE)

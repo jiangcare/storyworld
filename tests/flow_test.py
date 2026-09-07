@@ -1,22 +1,14 @@
-"""通道抽象 + 平台无关游戏流测试：SQLite + FakeRedis + Mock LLM + FakeChannel。"""
+"""通道抽象 + 平台无关游戏流测试：SQLite 文件库 + Mock LLM + FakeChannel。"""
 import asyncio
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import fakeredis
 import app.db as dbmod
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from tests.support import use_test_database
 
-dbmod.engine = create_engine(
-    "sqlite:///:memory:", connect_args={"check_same_thread": False}
-)
-dbmod.SessionLocal = sessionmaker(
-    bind=dbmod.engine, autoflush=False, expire_on_commit=False
-)
-dbmod._redis = fakeredis.FakeAsyncRedis(decode_responses=True)
+use_test_database()
 
 from app.channel.base import Channel
 from app.channel.types import Action, ChannelCapabilities, ChannelEvent

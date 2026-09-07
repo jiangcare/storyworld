@@ -53,6 +53,12 @@
     <button class="ghost" id="btnLogout">退出</button>
   </div>
   <div id="chat"><div class="splash">连接中…</div></div>
+  <nav aria-label="冒险操作" style="display:flex;gap:8px;flex-wrap:wrap;padding:8px 16px">
+    <button class="ghost" onclick="sendText('/scripts')">📜 选择世界</button>
+    <button class="ghost" onclick="sendText('/continue')">▶ 继续观察</button>
+    <button class="ghost" onclick="sendText('/status')">🧬 角色与背包</button>
+    <button class="ghost" onclick="sendText('/resume')">💾 恢复旅程</button>
+  </nav>
   <div id="inputbar">
     <input id="input" placeholder="输入行动 / 命令（/act /status /log /upload …）" autocomplete="off">
     <button id="send">发送</button>

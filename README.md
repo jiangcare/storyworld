@@ -1,5 +1,7 @@
 # StoryWorld · AI 互动小说世界
 
+> **v0.2 开发进度**：已新增「钟楼雨夜 · 即时单人体验」，自由输入即时执行规则、关键剧情暂停、每回合自动保存，使用 `/continue` 推进、`/resume` 恢复。运行 `seed.py` 添加示例剧本。试玩、事务设计及尚未完成项见 [v0.2 开发说明](docs/mvp-v02-progress.md)。下文的每日结算说明适用于旧版剧本。
+
 > **多平台 · AI 实时生成 · 本地部署** 的文字冒险游戏平台：单人闯关、兄弟群多人、恋人剧本、论坛大型副本……引擎与游戏流平台无关，任何"能收发文字"的平台都能接入（Telegram / Web 已实现，QQ/钉钉适配器开发中）。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -10,7 +12,7 @@
 
 - **AI 生成**：DeepSeek（OpenAI 兼容接口），默认模型 `deepseek-v4-flash`（可在 `.env` 修改）
 - **数据化玩法**：剧本预设（物品/能力/任务/主线）+ 运行时实体表（结构化提交）；**数值规则引擎**（JSON DSL：攻击/闪避/百分比加成/强化/抽奖/合成），每剧本规则可不同，AI 生成需过复杂度验收闸门
-- **存储**：MySQL（SQLAlchemy）+ Redis（会话/限流/锁）
+- **存储**：SQLite（SQLAlchemy），游戏存档、登录会话、草稿和结算租约保存在本地文件，无需额外服务
 - **通道**：Telegram（aiogram 3 长轮询）+ Web（浏览器聊天室，含房间多人），本地部署无需域名/服务器
 - **后台**：FastAPI + Jinja2 + Bootstrap，管理剧本、审核上传、监控世界
 
@@ -23,10 +25,10 @@ storyworld/
 ├─ run_bot.py / run_web.py / run_admin.py / start_all.py  # 启动入口
 ├─ seed.py               # 初始化数据库 + 写入种子剧本
 ├─ smoke_test.py         # 离线全链路测试
-├─ docker-compose.yml    # 本地 MySQL + Redis
+├─ data/storyworld.db    # 自动创建的本地数据库（不提交到版本库）
 ├─ app/
 │  ├─ config.py          # .env 配置
-│  ├─ db.py              # SQLAlchemy + Redis 封装
+│  ├─ db.py              # SQLite 连接、WAL、短写事务
 │  ├─ models.py          # 数据模型（含 platform 多平台用户维度）
 │  ├─ ai/                # DeepSeek 客户端 + 导演/编剧/意图/剧本完善
 │  ├─ engine/            # 剧本 DSL、世界服务、实体层、每日 tick（平台无关）
@@ -36,9 +38,9 @@ storyworld/
 │  ├─ web/               # Web 通道：网页聊天界面（注册/房间/WebSocket）+ 前端页面
 │  ├─ bot/               # Telegram 运行时（接线通道 + 每日推送调度）
 │  └─ admin/             # FastAPI 后台管理系统
-├─ tests/                # 引擎/通道/规则/实体/MySQL/后台 测试
+├─ tests/                # 引擎/通道/规则/实体/存储/后台测试
 ├─ docs/                 # 剧本规范、通道适配器文档
-└─ .github/workflows/    # CI（离线 + MySQL 服务测试）
+└─ .github/workflows/    # CI（全部使用真实 SQLite 临时文件）
 ```
 
 ## 多平台通道架构
@@ -88,74 +90,48 @@ storyworld/
 
 ## 快速开始
 
-### 1. 启动 MySQL + Redis（二选一）
+### 1. 安装和配置
 
-**方式 A：Docker Compose**（推荐，需要 Docker Desktop 且启用 WSL2）
-```bash
-docker compose up -d
-```
-
-**方式 B：Docker 命令（无 compose 环境）**
-```bash
-docker run -d --name storyworld-mysql \
-  -e MYSQL_ROOT_PASSWORD=root123 -e MYSQL_DATABASE=storyworld \
-  -e MYSQL_USER=storyworld -e MYSQL_PASSWORD=storyworld123 \
-  -p 3306:3306 -v storyworld_mysql:/var/lib/mysql \
-  mysql:8.4 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-
-docker run -d --name storyworld-redis -p 6379:6379 -v storyworld_redis:/data redis:7-alpine
-```
-
-**方式 C：原生安装 MySQL 8 + Redis（无 Docker 时）**
-```sql
--- 以 root 登录 MySQL 执行：
-CREATE DATABASE storyworld CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'storyworld'@'localhost' IDENTIFIED BY 'storyworld123';
-GRANT ALL PRIVILEGES ON storyworld.* TO 'storyworld'@'localhost';
-FLUSH PRIVILEGES;
-```
-Redis 用默认配置启动即可（`redis-server`）。表结构无需手动建，`seed.py` 会自动建表。
-
-### 2. 配置 `.env`
-
-```bash
-cp .env.example .env
-# 编辑 .env：
-#   TELEGRAM_BOT_TOKEN  在 @BotFather 创建机器人获取
-#   DEEPSEEK_API_KEY    https://platform.deepseek.com 获取
-```
-
-### 3. 安装依赖 + 初始化
+需要 Python 3.9+（带标准库 `sqlite3`），无需安装 MySQL、Redis 或 Docker。
 
 ```bash
 python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt   # Windows
-.venv\Scripts\python -m pip install -r requirements-dev.txt  # 可选：冒烟测试用
-.venv\Scripts\python seed.py                              # 建表 + 种子剧本 + 默认管理员
+# macOS / Linux
+.venv/bin/python -m pip install -r requirements.txt
+# Windows 则使用 .venv\Scripts\python
+cp .env.example .env
 ```
 
-### 3.5 测试
+编辑 `.env`，填写 `DEEPSEEK_API_KEY`；仅使用浏览器时可以留空 `TELEGRAM_BOT_TOKEN`。
+数据库默认地址是 `DATABASE_URL=sqlite:///data/storyworld.db`，首次启动自动建库。相对路径始终以项目根目录为基准，分别启动 Web、Bot、后台也会共享同一个文件。
+
+### 2. 初始化并启动
 
 ```bash
-# 离线测试（不需要 MySQL/Redis/API Key）
-.venv\Scripts\python -X utf8 smoke_test.py            # 引擎全链路
-.venv\Scripts\python -X utf8 tests\flow_test.py        # 通道抽象 + 游戏流
-.venv\Scripts\python -X utf8 tests\web_test.py         # Web 通道（注册/房间/广播）
-.venv\Scripts\python -X utf8 tests\rules_test.py       # 规则引擎（表达式/DSL/复杂度验收）
-.venv\Scripts\python -X utf8 tests\entities_test.py    # 实体数据层（装备/能力/任务/上限）
-
-# MySQL 集成测试（需要真实 MySQL）
-.venv\Scripts\python seed.py
-.venv\Scripts\python -X utf8 tests\mysql_test.py
-.venv\Scripts\python -X utf8 tests\admin_test.py
+.venv/bin/python seed.py
+.venv/bin/python start_all.py
 ```
 
-CI（GitHub Actions）会自动跑以上全部：离线测试 + MySQL 服务容器测试。
+打开 `http://127.0.0.1:8081/web`。仅需 Web 即时单人体验时，可执行 `.venv/bin/python run_web.py`。
 
-### 3.6 本地开发环境说明
+### 3. 测试与备份
 
-- 本开发机已验证：离线 5 套测试全通过、真实 MySQL（MariaDB 兼容协议）集成通过
-- Redis 逻辑用 FakeRedis 覆盖（本机沙箱无法运行真实 Redis）；部署请用真实 Redis
+```bash
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python smoke_test.py
+.venv/bin/python tests/flow_test.py
+.venv/bin/python tests/web_test.py
+.venv/bin/python tests/rules_test.py
+.venv/bin/python tests/entities_test.py
+.venv/bin/python tests/narrative_test.py
+.venv/bin/python tests/sqlite_test.py
+.venv/bin/python tests/admin_test.py
+.venv/bin/python tests/local_storage_test.py
+```
+
+测试创建独立临时数据库，仅模拟 AI，不连接外部服务，也不改动实际存档。CI 执行相同测试。
+
+数据库使用 WAL 模式，运行时可能同时出现 `.db-wal` 和 `.db-shm` 文件。备份请使用 `python backup_db.py backups/storyworld.db`；该命令使用 SQLite 在线备份接口，不需要停机，且不会覆盖已有文件。存储路径、并发限制和旧数据说明见 [本地存储文档](docs/local-storage.md)。
 
 ### 4. 启动
 
@@ -230,8 +206,7 @@ CI（GitHub Actions）会自动跑以上全部：离线测试 + MySQL 服务容�
 | `DEEPSEEK_API_KEY` | - | DeepSeek 平台 Key |
 | `DEEPSEEK_BASE_URL` | https://api.deepseek.com | OpenAI 兼容地址 |
 | `DEEPSEEK_MODEL` | deepseek-v4-flash | 模型名（不支持则改 deepseek-chat） |
-| `MYSQL_*` | 127.0.0.1/storyworld | MySQL 连接 |
-| `REDIS_*` | 127.0.0.1/6379 | Redis 连接 |
+| `DATABASE_URL` | sqlite:///data/storyworld.db | 本地 SQLite 文件地址 |
 | `ADMIN_USERNAME/PASSWORD` | admin/admin123 | 后台默认账号 |
 | `PUSH_HOUR/PUSH_MINUTE` | 20:00 | 每日推送时间 |
 | `MAX_ACTION_POINTS` | 3 | 每人每天行动点 |

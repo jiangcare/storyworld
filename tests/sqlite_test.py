@@ -1,14 +1,14 @@
-"""真实 MySQL 集成测试（Redis/LLM 用假实现，仅验证 MySQL 兼容性）。"""
+"""SQLite 文件库 集成测试（仅模拟 LLM，验证真实 SQLite 存档与事务）。"""
 import asyncio
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import fakeredis
 import app.db as dbmod
+from tests.support import use_test_database
 
-dbmod._redis = fakeredis.FakeAsyncRedis(decode_responses=True)
+use_test_database()
 
 import app.ai.director as director_mod
 import app.ai.writer as writer_mod
@@ -44,6 +44,8 @@ writer_mod.generate_scene = fake_scene
 
 
 async def main():
+    from seed import seed
+    seed()
     from app.engine import world_service
     from app.engine.tick import run_tick
     from app.models import CanonEvent, Scene, Script, World
@@ -52,8 +54,8 @@ async def main():
     multi = db.query(Script).filter(Script.mode == "multi").first()
     assert multi, "缺少多人剧本"
 
-    u1 = world_service.get_or_create_user(db, 9001, username="mysql_a", display_name="测试甲")
-    u2 = world_service.get_or_create_user(db, 9002, username="mysql_b", display_name="测试乙")
+    u1 = world_service.get_or_create_user(db, 9001, username="sqlite_a", display_name="测试甲")
+    u2 = world_service.get_or_create_user(db, 9002, username="sqlite_b", display_name="测试乙")
     w = world_service.create_world(db, u1, multi, chat_id=-999)
     world_service.join_world(db, w, u1)
     world_service.join_world(db, w, u2)
@@ -75,7 +77,7 @@ async def main():
     assert st["hp"] == 9, f"hp 应为9: {st['hp']}"
     assert "手电筒" in st["items"] and "神秘字条" in st["clues"], st
     assert st["notes"].get("关系") == "光头强 中立", st
-    print("REAL MYSQL TICK TEST PASSED (中文/JSON列/事务 OK)")
+    print("SQLITE TICK TEST PASSED (中文/JSON列/事务 OK)")
 
 
 if __name__ == "__main__":

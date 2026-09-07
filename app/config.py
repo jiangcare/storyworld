@@ -21,18 +21,8 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 1600
     llm_timeout: float = 90.0
 
-    # MySQL
-    mysql_host: str = "127.0.0.1"
-    mysql_port: int = 3306
-    mysql_user: str = "storyworld"
-    mysql_password: str = "storyworld123"
-    mysql_db: str = "storyworld"
-
-    # Redis
-    redis_host: str = "127.0.0.1"
-    redis_port: int = 6379
-    redis_db: int = 0
-    redis_password: str = ""
+    # 相对路径始终以项目根目录为基准，独立启动 Web/Bot/后台也共享同一存档。
+    database_url: str = "sqlite:///data/storyworld.db"
 
     # 后台管理
     admin_username: str = "admin"
@@ -43,19 +33,6 @@ class Settings(BaseSettings):
     push_minute: int = 0
     max_action_points: int = 3
     tick_scan_seconds: int = 60
-
-    @property
-    def mysql_dsn(self) -> str:
-        return (
-            f"mysql+pymysql://{self.mysql_user}:{self.mysql_password}"
-            f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_db}?charset=utf8mb4"
-        )
-
-    @property
-    def redis_url(self) -> str:
-        auth = f":{self.redis_password}@" if self.redis_password else ""
-        return f"redis://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
-
 
 @lru_cache
 def get_settings() -> Settings:

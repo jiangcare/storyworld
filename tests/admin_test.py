@@ -1,19 +1,21 @@
-"""后台管理系统验证：FastAPI TestClient + 真实 MySQL + fakeredis 会话。"""
+"""后台管理系统验证：FastAPI TestClient + SQLite 文件库 + 持久化本地会话。"""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import fakeredis
 import app.db as dbmod
+from tests.support import use_test_database
 
-dbmod._redis = fakeredis.FakeAsyncRedis(decode_responses=True)
+use_test_database()
 
 from fastapi.testclient import TestClient  # noqa: E402
 from app.admin.main import app  # noqa: E402
 
 
 def main():
+    from seed import seed
+    seed()
     with TestClient(app) as c:
         # 未登录 → 重定向登录页
         r = c.get("/admin", follow_redirects=False)
@@ -31,7 +33,7 @@ def main():
         r = c.post("/admin/login", data={"username": "admin", "password": "admin123"}, follow_redirects=False)
         assert r.status_code == 303, f"登录成功应303，实际{r.status_code}"
 
-        # 仪表盘（真实 MySQL 数据）
+        # 仪表盘（SQLite 文件库 数据）
         r = c.get("/admin")
         assert r.status_code == 200 and "仪表盘" in r.text, "仪表盘应渲染"
 
@@ -43,7 +45,7 @@ def main():
         r = c.get("/admin/scripts?status=pending")
         assert r.status_code == 200
 
-        # 世界管理（真实 MySQL 中的测试世界）
+        # 世界管理（SQLite 文件库 中的测试世界）
         r = c.get("/admin/worlds")
         assert r.status_code == 200 and "世界" in r.text, "世界页应渲染"
 

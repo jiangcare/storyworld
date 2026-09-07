@@ -26,25 +26,23 @@ python -m venv .venv
 cp .env.example .env     # 填入 TELEGRAM_BOT_TOKEN / DEEPSEEK_API_KEY
 ```
 
-MySQL + Redis 任选其一：
-- Docker：`docker compose up -d`
-- 原生：见 README「方式 C」
+无需外部数据库服务，首次启动自动创建 `data/storyworld.db`；可用 `DATABASE_URL` 修改位置。
 
 ## 跑测试
 
 ```bash
-# 离线（不需要 MySQL/Redis/API Key）
-python smoke_test.py                # 引擎全链路（SQLite+FakeRedis+Mock LLM）
-python tests/flow_test.py           # 通道抽象 + 游戏流
-python tests/web_test.py            # Web 通道（注册/房间/广播）
-
-# 需要真实 MySQL（CI 里用 mysql 服务容器跑）
-python seed.py
-python tests/mysql_test.py          # MySQL 兼容性
-python tests/admin_test.py          # 后台管理
+python smoke_test.py
+python tests/flow_test.py
+python tests/web_test.py
+python tests/rules_test.py
+python tests/entities_test.py
+python tests/narrative_test.py
+python tests/sqlite_test.py
+python tests/admin_test.py
+python tests/local_storage_test.py
 ```
 
-提交前请确保离线测试通过；改动涉及 MySQL 行为的尽量补跑 mysql_test。
+测试使用与实际部署相同的 SQLite 文件库、WAL 和持久化会话，仅模拟 AI。每套测试使用隔离的临时目录，不改动开发者存档。提交前请完成以上回归；存储修改需要覆盖多连接/多进程竞争及重启读取。
 
 ## 提交剧本（不会写代码也能贡献！）
 

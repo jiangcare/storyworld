@@ -1,4 +1,4 @@
-"""后台认证：PBKDF2 密码哈希 + Redis 会话。"""
+"""后台认证：PBKDF2 密码哈希 + SQLite 会话。"""
 from __future__ import annotations
 
 import hashlib
@@ -6,7 +6,7 @@ import hmac
 import os
 import secrets
 
-from ..db import get_redis
+from ..db import get_store
 
 _ITERATIONS = 100_000
 SESSION_TTL = 12 * 3600
@@ -31,18 +31,18 @@ def verify_password(password: str, stored: str) -> bool:
 
 async def create_session(username: str) -> str:
     token = secrets.token_hex(16)
-    r = await get_redis()
+    r = await get_store()
     await r.set(f"session:{token}", username, ex=SESSION_TTL)
     return token
 
 
 async def destroy_session(token: str) -> None:
-    r = await get_redis()
+    r = await get_store()
     await r.delete(f"session:{token}")
 
 
 async def get_session_username(token: str) -> str | None:
     if not token:
         return None
-    r = await get_redis()
+    r = await get_store()
     return await r.get(f"session:{token}")

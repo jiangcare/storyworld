@@ -5,6 +5,7 @@ import logging
 from app.db import init_db, SessionLocal
 from app.engine.script_dsl import validate_script
 from app.models import AdminUser, Script
+from app.engine.demo_story import SEED_DEMO
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -188,6 +189,9 @@ SEED_SCRIPTS = [
         },
     },
 ]
+
+
+SEED_SCRIPTS.append(SEED_DEMO)
 
 
 def seed() -> None:

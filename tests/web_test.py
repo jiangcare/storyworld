@@ -1,20 +1,13 @@
-"""Web 通道测试：注册/聊天/历史/房间/多人广播（SQLite + FakeRedis，真实 GameFlow）。"""
+"""Web 通道测试：注册/聊天/历史/房间/多人广播（SQLite 文件库，真实 GameFlow）。"""
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import fakeredis
 import app.db as dbmod
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+from tests.support import use_test_database
 
-dbmod.engine = create_engine(
-    "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-)
-dbmod.SessionLocal = sessionmaker(bind=dbmod.engine, autoflush=False, expire_on_commit=False)
-dbmod._redis = fakeredis.FakeAsyncRedis(decode_responses=True)
+use_test_database()
 
 from fastapi.testclient import TestClient
 from app.web.main import app

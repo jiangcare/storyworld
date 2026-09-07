@@ -106,6 +106,13 @@ def validate_script(content: dict) -> list[str]:
         }
         for e in rules_dsl.validate_rule_pack(rules, defs):
             errors.append(f"rules: {e}")
+    if "narrative" in content:
+        from .narrative_dsl import parse_spec
+
+        try:
+            parse_spec(content)
+        except (ValueError, TypeError, KeyError) as exc:
+            errors.append(f"narrative: {exc}")
     return errors
 
 

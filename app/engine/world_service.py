@@ -1,24 +1,27 @@
 """世界服务：创建世界、加入、行动、状态查询。"""
 from __future__ import annotations
 
+import copy
 import logging
+import time
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..ai import intent as intent_ai
 from ..config import settings
-from ..db import get_redis
+from ..db import begin_write
 from ..models import (
     CanonEvent,
     PlayerAction,
+    RuntimeEntry,
     Scene,
     Script,
     User,
     World,
     WorldPlayer,
 )
-from . import script_dsl
+from . import narrative, script_dsl
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +157,11 @@ def join_world(db: Session, world: World, user: User) -> WorldPlayer | None:
 def start_world(db: Session, world: World) -> World:
     """世界开始运行：单人局在创建后自动开始；多人局满员或房主决定时开始。"""
     if world.status == "recruiting":
+        if narrative.enabled(world.script.content_json):
+            player = get_player(db, world, world.owner_id)
+            if player is None:
+                raise ValueError("单人世界需要先创建角色")
+            narrative.initialize(world, player, world.script.content_json)
         world.status = "running"
         world.started_at = world.started_at or __import__("datetime").datetime.now()
         db.add(
@@ -206,17 +214,39 @@ async def record_action(
     if len(text) > 500:
         return False, "行动描述太长了（最多500字）。"
 
-    r = await get_redis()
-    key = f"ap:{world.id}:{player.user_id}:{world.day}"
-    used = await r.incr(key)
-    if used > settings.max_action_points:
-        await r.decr(key)
-        return False, f"今天的行动点已用完（{settings.max_action_points}点）。等明天的新剧情吧。"
+    if narrative.enabled(world.script.content_json):
+        return await narrative.take_turn(db, world, player, text)
 
-    db.add(PlayerAction(world_id=world.id, user_id=player.user_id, day=world.day, text=text))
-    db.commit()
+    world_id, player_id = world.id, player.id
+    db.rollback()
+    try:
+        begin_write(db)
+        db.refresh(world)
+        db.refresh(player)
+        if world.status != "running" or player.status != "alive" or player.world_id != world_id:
+            db.rollback()
+            return False, "世界或角色当前不能行动。"
+        lease = db.get(RuntimeEntry, f"lock:tick:{world_id}")
+        if lease and lease.expires_at and lease.expires_at > time.time():
+            db.rollback()
+            return False, "世界正在结算，请等新剧情到来后再行动。"
+        used = db.scalar(select(func.count(PlayerAction.id)).where(
+            PlayerAction.world_id == world_id, PlayerAction.user_id == player.user_id,
+            PlayerAction.day == world.day,
+        )) or 0
+        if used >= settings.max_action_points:
+            db.rollback()
+            return False, f"今天的行动点已用完（{settings.max_action_points}点）。等明天的新剧情吧。"
+        day = world.day
+        db.add(PlayerAction(world_id=world_id, user_id=player.user_id, day=day, text=text))
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("记录行动失败 player=%s", player_id)
+        return False, "行动未能保存，请稍后重试。"
+    used += 1
     left = settings.max_action_points - used
-    return True, f"已记录你的行动（第{world.day}天）。今日剩余行动点：{left}。"
+    return True, f"已记录你的行动（第{day}天）。今日剩余行动点：{left}。"
 
 
 async def parse_action_intent(text: str) -> dict:
@@ -281,6 +311,12 @@ def build_canon_summary(db: Session, world: World, limit: int = 12) -> str:
 
 
 def build_player_recent(db: Session, world: World, player: WorldPlayer, limit: int = 2) -> str:
+    if narrative.enabled(world.script.content_json):
+        actions = list(db.scalars(select(PlayerAction).where(
+            PlayerAction.world_id == world.id, PlayerAction.user_id == player.user_id,
+            PlayerAction.outcome.is_not(None),
+        ).order_by(PlayerAction.id.desc()).limit(limit)))
+        return "\n---\n".join(a.outcome for a in reversed(actions))
     scenes = list(
         db.scalars(
             select(Scene)
@@ -303,7 +339,7 @@ def build_player_state_text(player: WorldPlayer) -> str:
 
 def apply_state_changes(player: WorldPlayer, changes: dict) -> None:
     """把编剧层的 state_changes 应用到玩家私有状态。"""
-    s = player.private_state or {}
+    s = copy.deepcopy(player.private_state or {})
     s.setdefault("hp", 10)
     s.setdefault("items", [])
     s.setdefault("clues", [])
@@ -334,6 +370,22 @@ def apply_state_changes(player: WorldPlayer, changes: dict) -> None:
 
 def build_player_status_message(player: WorldPlayer, world: World, content: dict) -> str:
     s = player.private_state or {}
+    if narrative.enabled(content):
+        spec = narrative.parse_spec(content)
+        progress = world.progress_json["narrative"]
+        names = {n["id"]: n["name"] for n in content.get("npcs", [])}
+        return "\n".join([
+            f"🧭 世界：{world.title}",
+            f"🧬 角色：{player.character_name}（{player.character_role}）",
+            f"📍 {spec.locations[s['location']].name} · 已过 {progress['minute']} 分钟",
+            f"❤️ 生命：{s['hp']}/{s['max_hp']} · 等级 {s['level']} · 经验 {s['xp']}",
+            "🎒 道具：" + ("、".join(s.get("items", [])) or "无"),
+            "🔎 线索：" + ("；".join(s.get("clues", [])) or "无"),
+            "🤝 关系：" + ("、".join(f"{names.get(k, k)} {v:+d}" for k, v in s.get("relationships", {}).items()) or "尚未建立"),
+            f"🏁 {progress['ending']}" if progress["ending"] else (
+                "⏸ 关键事件等待你的决定" if progress["paused"] else "直接描述行动，或 /continue 继续观察"),
+            "💾 进度已自动保存，下次使用 /resume 继续。",
+        ])
     ch = script_dsl.chapter_for_day(content, world.day)
     lines = [
         f"🧭 世界：{world.title}",

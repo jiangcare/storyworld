@@ -1,0 +1,63 @@
+"""可完整游玩的 v0.2 单人副本；真相、检定与结局均由剧本预先定义。"""
+
+DEMO = {
+    "title": "钟楼雨夜 · 即时单人体验",
+    "description": "洪水将在一小时后淹没旧城。查明警报为何沉默，与守卫合作，或偷走钥匙独自离开。",
+    "genre": "悬疑生存", "mode": "single", "min_players": 1, "max_players": 1, "days": 1,
+    "world": {"name": "钟楼雨夜", "background": "暴雨封住了旧城。你在钟楼广场醒来，守卫林舟守着一把船钥匙。档案室亮着灯，码头传来呼救声。城里还有六十分钟。"},
+    "chapters": [{"day_start": 1, "day_end": 1, "title": "沉默的警钟", "goal": "找到逃生办法，决定是否救人", "events": []}],
+    "player_cards": [{"id": "traveler", "name": "归客", "role": "旧城信使",
+                      "public_desc": "你认得这座城的每一条街，却不知道今晚是谁锁住了警钟。",
+                      "stats": {"strength": 3, "agility": 4, "intellect": 4, "charm": 3, "luck": 3}}],
+    "npcs": [{"id": "guard", "name": "林舟", "role": "守卫", "personality": "谨慎、重视证据",
+              "secret": "他不知道上游闸门已开", "relation": "陌生"}],
+    "items": [{"id": "key", "name": "船钥匙", "kind": "quest"},
+              {"id": "rope", "name": "救援绳", "kind": "consumable"}],
+    "abilities": [],
+    "rules": {"checks": {"steal": {"formula": "0.3 + attr.agility * 0.1"}}},
+    "narrative": {
+        "version": 2, "start": "square",
+        "opening": "雨水漫过鞋面，钟楼却没有敲响警报。林舟攥着船钥匙：‘没有撤离命令，谁也别想动船。’档案室的窗还亮着；通向码头的小路正在积水。你可以直接描述想做的事，也可以 /continue 观察局势。",
+        "locations": {
+            "square": {"name": "钟楼广场", "description": "林舟守在钟楼旁，腰间挂着船钥匙。东边是档案室，南边是码头。", "exits": {"archive": 5, "dock": 10}},
+            "archive": {"name": "档案室", "description": "桌上铺着最新水情记录，柜子里放着救援绳。", "exits": {"square": 5, "dock": 5}},
+            "dock": {"name": "码头", "description": "一艘救生船锁在岸边，栈桥尽头有人被困。救援需要绳索，独自开船需要钥匙。", "exits": {"square": 10, "archive": 5}},
+        },
+        "interactions": {
+            "read_records": {"label": "调查水情记录，查明警报失灵的原因", "requires": {"location": "archive"},
+                "success": {"flags": {"evidence": True}, "clues": ["上游闸门已经开启；值班长扣下了撤离电报，林舟尚不知情。"], "xp": 5},
+                "success_text": "你找到被压在水情表下的撤离电报：上游已经开闸，值班长却扣下了命令。"},
+            "take_rope": {"label": "从档案室柜子拿取救援绳", "requires": {"location": "archive"},
+                "success": {"items": {"rope": 1}}, "success_text": "你取出一捆救援绳，收入背包。"},
+            "warn_guard": {"label": "拿水情证据说服林舟撤离，请他交出船钥匙", "requires": {"location": "square", "flags": {"evidence": True, "key_taken": False}},
+                "success": {"items": {"key": 1}, "flags": {"key_taken": True}, "relationships": {"guard": 20}, "xp": 5},
+                "success_text": "林舟读完电报，脸色苍白。他把船钥匙交给你：‘我去通知大家，码头交给你。’"},
+            "steal_key": {"label": "假装受伤引林舟靠近，偷取船钥匙", "requires": {"location": "square", "flags": {"key_taken": False}},
+                "check": "steal", "success": {"items": {"key": 1}, "flags": {"key_taken": True}, "relationships": {"guard": -15}, "xp": 5},
+                "failure": {"hp": -2, "relationships": {"guard": -10}},
+                "success_text": "你趁林舟俯身查看伤势，解下钥匙。他很快发现失窃，对你生出戒心。",
+                "failure_text": "林舟察觉你的手伸向钥匙，将你推开。你跌伤了肩膀，他也更不信任你。"},
+            "rescue": {"label": "用救援绳救下栈桥尽头的人，并与他们撤离", "requires": {"location": "dock"},
+                "cost": {"rope": 1}, "minutes": 10,
+                "success": {"flags": {"decision": True, "rescued": True}, "relationships": {"guard": 10}, "xp": 10},
+                "success_text": "你耗用救援绳，把被困的人拉过断桥。他们指出一条通往高地的检修道。"},
+            "leave_alone": {"label": "用船钥匙开船，放弃救援独自逃生", "requires": {"location": "dock", "items": {"key": 1}},
+                "cost": {"key": 1}, "success": {"flags": {"decision": True, "escaped": True}, "relationships": {"guard": -20}},
+                "success_text": "你用钥匙打开船锁，发动引擎。呼救声渐渐落在雨幕之后。"},
+        },
+        "anchors": {
+            "flood": {"requires": {"minute": 60}, "text": "洪峰越过钟楼，通往外界的路全部消失。",
+                "effect": {"hp": -100, "ending": "迟到的警报：你未能在洪峰到来前离开旧城。"}},
+            "together": {"requires": {"flags": {"rescued": True}}, "text": "你和获救者沿检修道登上高地，旧城在身后沉入雨水。",
+                "effect": {"ending": "共渡雨夜：你救下了陌生人，也让他们为你找到生路。"}},
+            "alone": {"requires": {"flags": {"escaped": True}}, "text": "船驶离旧城。你活了下来，却永远记得身后的呼救。",
+                "effect": {"ending": "独行者：你保住了自己，与林舟的关系再也回不到从前。"}},
+            "rain": {"requires": {"minute": 5}, "text": "远处响起沉闷的轰鸣，积水正沿石阶上涨。"},
+            "decision": {"requires": {"minute": 20}, "text": "码头的呼救声突然变得急促。时间紧迫：你准备救人，还是寻找独自离开的办法？",
+                "pause": True, "resume_flag": "decision"},
+        },
+    },
+}
+
+SEED_DEMO = {k: DEMO[k] for k in ("title", "description", "genre", "mode", "min_players", "max_players", "days")}
+SEED_DEMO["content_json"] = DEMO
