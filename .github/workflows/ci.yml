@@ -46,6 +46,8 @@ jobs:
         run: python tests/lighthouse_test.py
       - name: Open cultivation sandbox and infinite revival
         run: python tests/cultivation_test.py
+      - name: Novel prose and menus only on request
+        run: python tests/prose_test.py
       - name: Conversational replies without game state changes
         run: python tests/conversation_test.py
       - name: Player guidance and numbered choices

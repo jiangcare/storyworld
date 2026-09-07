@@ -58,6 +58,7 @@ class CLITests(unittest.IsolatedAsyncioTestCase):
 
     async def test_create_action_number_and_resume_in_new_channel(self):
         world, player = await self.create_cultivation()
+        await self.channel.submit('/guide', self.flow)
         index = next(i for i, action in enumerate(self.channel.actions, 1) if '静坐修炼' in action.label)
         await self.channel.submit(str(index), self.flow)
         self.assertIn('修为 +10', self.output.getvalue())
@@ -69,7 +70,7 @@ class CLITests(unittest.IsolatedAsyncioTestCase):
         await resumed.welcome(GameFlow(resumed))
         self.assertIn('修为 10/30', resumed.output.getvalue())
         self.assertIn('长生录', resumed.output.getvalue())
-        self.assertTrue(resumed.actions)
+        self.assertFalse(resumed.actions)
 
     async def test_profiles_and_platforms_do_not_share_saves(self):
         world, player = await self.create_cultivation()
@@ -85,6 +86,7 @@ class CLITests(unittest.IsolatedAsyncioTestCase):
 
     async def test_invalid_number_and_stale_number_do_not_change_state(self):
         world, player = await self.create_cultivation()
+        await self.channel.submit('/guide', self.flow)
         old_action = next(a for a in self.channel.actions if '静坐修炼' in a.label)
         await self.channel.submit('999', self.flow)
         self.assertIn('请选择', self.output.getvalue())

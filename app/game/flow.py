@@ -106,7 +106,7 @@ class GameFlow:
         await self._do_action(ev, ev.text)
 
     async def _send_play(self, ev, db, world, player, text, *, explain=False):
-        if player is None or not narrative.enabled(world.script.content_json):
+        if not explain or player is None or not narrative.enabled(world.script.content_json):
             await _ch(ev).send(ev.chat_id, text)
             return
         # 最新存档决定可执行选项；读事务不跨本地存储写操作。
@@ -116,14 +116,15 @@ class GameFlow:
         choices, token = await guidance.remember(world, player)
         buttons = [Action(f"{i}. {choice['label']}", f"pick:{world.id}:{token}:{i}")
                    for i, choice in enumerate(choices, 1)]
-        await _ch(ev).send(ev.chat_id, text + "\n\n" + guidance.render(world, player, choices, explain=explain), actions=buttons)
+        guide = guidance.render(world, player, choices, explain=True)
+        await _ch(ev).send(ev.chat_id, (text + "\n\n" if text else "") + guide, actions=buttons)
 
     # ============ 命令 ============
 
     async def _handle_command(self, ev: ChannelEvent, cmd: str, arg: str) -> None:
         db = SessionLocal()
         try:
-            if cmd in ("help", "guide"):
+            if cmd in ("help", "guide", "options"):
                 await self._do_action(ev, "怎么玩")
             elif cmd == "start":
                 await _ch(ev).send(
@@ -352,7 +353,10 @@ class GameFlow:
             if social_reply(text):
                 await _ch(ev).send(ev.chat_id, msg)
             else:
-                await self._send_play(ev, db, world, player, msg, explain=guidance.is_help(text))
+                help_requested = guidance.is_help(text)
+                await self._send_play(ev, db, world, player,
+                                      "" if help_requested and narrative.enabled(world.script.content_json) else msg,
+                                      explain=help_requested)
         finally:
             db.close()
 
@@ -411,8 +415,7 @@ class GameFlow:
                         f"🌍 单人世界【{world.title}】已开始！\n"
                         f"你是{world.players[0].character_name}。\n\n"
                         + script.content_json["narrative"]["opening"]
-                        + "\n\n每次行动自动保存；/status 查看角色，/resume 恢复旅程。",
-                        explain=True,
+                        + "\n\n直接描述你的行动即可。需要选项时输入 /guide；/status 查看角色。进度会自动保存。",
                     )
                     return
                 await _ch(ev).send(

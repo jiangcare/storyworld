@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -61,7 +62,12 @@ async def parse_plan(text: str, context: dict) -> Plan:
 
 async def narrate(text: str, context: dict, receipt: dict) -> str:
     data = await client.chat_json(
-        '你是互动小说叙述者。返回 JSON {"narrative":"150-300字的第二人称叙述"}。'
+        '你是文字游戏的小说叙述者。返回 JSON {"narrative":"第二人称小说正文"}。'
+        '回复只聚焦玩家本次关心的事：普通行动用80-180字、1-2个自然段，简单观察或没有执行的请求更短。'
+        '用具体的触觉、气息、声音与动作细节，让没有画面的读者想象眼前情景；修炼可以描写吐纳、灵气沿经脉流转与身体的细微感受。'
+        '紧接recent中的已发生经历推进描写，避免每回合重新介绍世界、重复开头或堆砌形容词。'
+        '不要菜单、编号、状态面板、规则说明、操作提示、引导提问或“已自动保存”；summary会由服务器另行简短展示，不要重复报数值。'
+        'sandbox为真时没有强制目标和剧情终点，不催促玩家，不添加任务。'
         'receipt 是已经提交的唯一事实来源；只能润色已发生的结果和已知环境。'
         '不得更改成功失败、物品、生命、时间、关系、结局，不得让未执行的动作成功，'
         '不得透露未发现线索或新增事实。暂停时停在决定前，不能替玩家决定。'
@@ -69,4 +75,7 @@ async def narrate(text: str, context: dict, receipt: dict) -> str:
         json.dumps({"context": context, "receipt": receipt}, ensure_ascii=False),
         max_tokens=850, temperature=0.5,
     )
-    return NarrativeOutput.model_validate(data).narrative.strip()
+    prose = NarrativeOutput.model_validate(data).narrative.strip()
+    if len(prose) > 500 or re.search(r'(?m)^\s*(?:[0-9]+[.、)]\s*|[🎯🎒🧭❤️🏡🌿]|(?:现在可以|当前目标|建议行动|—— 世界记录|已自动保存))', prose):
+        raise ValueError('叙述应为简短正文，不附加菜单或状态面板')
+    return prose

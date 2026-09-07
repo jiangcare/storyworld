@@ -16,7 +16,7 @@ _HELP = {"怎么玩", "这个游戏怎么玩", "游戏怎么玩", "这是要干�
          "不知道干什么", "不知道做什么", "帮助", "游戏帮助", "玩法", "游戏目标", "目标是什么",
          "游戏规则是什么", "游戏规则时什么", "游戏规则", "规则是什么", "规则",
          "都说说", "都说一下", "详细说说", "具体说说",
-         "有什么可以做", "我能做什么", "提示", "给我提示", "help", "how to play"}
+         "有什么可以做", "我能做什么", "提示", "给我提示", "选项", "显示选项", "有哪些选择", "help", "how to play"}
 
 
 def is_help(text):
@@ -127,15 +127,15 @@ async def resolve(world, player, index, token=None):
     store = await get_store()
     raw = await store.get(_key(world, player))
     if not raw:
-        raise ValueError("还没有可选择的列表，或列表已过期。请从下方新选项中选择。")
+        raise ValueError("还没有可选择的列表，或列表已过期。输入 /guide 查看选项，也可以直接描述行动。")
     menu = json.loads(raw)
     if (menu["revision"] != world.progress_json["narrative"]["revision"]
             or menu["script"] != _fingerprint(world.script.content_json)
             or (token is not None and token != menu["token"])):
-        raise ValueError("场景或选项已更新，请从下方新选项中重新选择。")
+        raise ValueError("场景或选项已更新。输入 /guide 查看当前选项，也可以直接描述行动。")
     if not 1 <= index <= len(menu["options"]):
         raise ValueError(f"请回复 1-{len(menu['options'])} 中的编号，或直接描述行动。")
     choice = menu["options"][index - 1]
     if choice not in options(world.script.content_json, player.private_state, world.progress_json["narrative"]):
-        raise ValueError("这个行动现在无法执行，请重新选择。")
+        raise ValueError("这个行动现在无法执行。输入 /guide 查看当前选项。")
     return Plan(actions=[Action(kind=choice["kind"], target=choice["target"])])

@@ -49,9 +49,10 @@ class GuidanceTests(unittest.IsolatedAsyncioTestCase):
     async def test_exact_user_transcript_produces_goal_and_working_number(self):
         status = await self.dispatch('/status')
         self.assertIn('找到逃生办法', status)
-        self.assertIn('1. 去档案室', status)
+        self.assertNotIn('1. 去档案室', status)
         observed = await self.dispatch('继续观察')
-        self.assertIn('已过 0 分钟', observed)
+        self.assertNotIn('现在可以', observed)
+        self.assertEqual(self.world.progress_json['narrative']['minute'], 0)
         for question in ['这是要干嘛？', '这个游戏怎么玩', '/help', '/guide']:
             before = self.db.query(PlayerAction).count()
             response = await self.dispatch(question)
@@ -69,14 +70,15 @@ class GuidanceTests(unittest.IsolatedAsyncioTestCase):
         for i in range(8):
             if self.world.status == 'finished':
                 break
+            await self.dispatch('/guide')
             await self.dispatch('1')
         self.assertEqual(self.world.status, 'finished')
         self.assertIn('共渡雨夜', self.world.progress_json['narrative']['ending'])
         self.parser.assert_not_called()
-        self.assertEqual(self.channel.send.call_args.kwargs['actions'], [])
+        self.assertFalse(self.channel.send.call_args.kwargs.get('actions'))
 
     async def test_old_button_and_foreign_player_cannot_execute_choice(self):
-        await self.dispatch('/status')
+        await self.dispatch('/guide')
         old = self.channel.send.call_args.kwargs['actions'][0].payload
         await self.dispatch(payload=old, uid=99999)
         self.assertEqual(self.db.query(PlayerAction).count(), 0)
@@ -89,6 +91,7 @@ class GuidanceTests(unittest.IsolatedAsyncioTestCase):
     async def test_absent_invalid_and_stale_numeric_menu_do_not_guess(self):
         result = await self.dispatch('1')
         self.assertIn('还没有可选择', result)
+        await self.dispatch('/guide')
         for number in ['0', '99']:
             result = await self.dispatch(number)
             self.assertIn('中的编号', result)
@@ -108,6 +111,7 @@ class GuidanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('warn_guard', [c['target'] for c in choices()])
         await self.dispatch('/guide')
         await self.dispatch('1')  # 档案室
+        await self.dispatch('/guide')
         await self.dispatch('1')  # 调查记录
         targets = [c['target'] for c in choices()]
         self.assertNotIn('read_records', targets)
@@ -121,12 +125,13 @@ class GuidanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.db.query(PlayerAction).count(), 0)
         self.parser.assert_not_called()
 
-    async def test_initial_creation_and_resume_include_current_options(self):
+    async def test_initial_creation_and_resume_offer_help_without_spamming_options(self):
         await self.dispatch(payload=f'mk:{self.world.script_id}', uid=55555)
-        self.assertIn('1. 去档案室', self.channel.send.call_args.args[1])
-        self.assertTrue(self.channel.send.call_args.kwargs['actions'])
+        self.assertNotIn('1. 去档案室', self.channel.send.call_args.args[1])
+        self.assertIn('/guide', self.channel.send.call_args.args[1])
+        self.assertFalse(self.channel.send.call_args.kwargs.get('actions'))
         await self.dispatch('/resume', uid=55555)
-        self.assertIn('现在可以', self.channel.send.call_args.args[1])
+        self.assertNotIn('现在可以', self.channel.send.call_args.args[1])
         self.parser.assert_not_called()
 
 

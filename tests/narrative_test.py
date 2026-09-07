@@ -232,7 +232,9 @@ class NarrativeTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("钟楼却没有敲响" in t for t in channel.sent))
         await flow.dispatch(ChannelEvent(platform="test", user_id=9182, chat_id=9182,
                                         text="/continue", is_private=True))
-        self.assertIn("已过 5 分钟", channel.sent[-1])
+        self.db.expire_all()
+        newest = self.db.query(World).order_by(World.id.desc()).first()
+        self.assertEqual(newest.progress_json["narrative"]["minute"], 5)
 
 
 if __name__ == "__main__":

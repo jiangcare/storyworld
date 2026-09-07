@@ -278,9 +278,13 @@ class CultivationTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn('🎯', output)
             self.assertNotIn('共 1 天', output)
             self.assertNotIn('旅程已结束', output)
-            self.assertIn('自由修行', output)
+            if text in ('/guide', '这是要干嘛'):
+                self.assertIn('自由修行', output)
+                self.assertTrue(channel.send.call_args.kwargs.get('actions'))
+            else:
+                self.assertFalse(channel.send.call_args.kwargs.get('actions'))
         self.assertIn('修为 +10', output)
-        self.assertTrue(channel.send.call_args.kwargs['actions'])
+        self.assertFalse(channel.send.call_args.kwargs.get('actions'))
         self.assertLess(len(output), 4096)
 
     async def test_telegram_market_buttons_include_all_routes(self):
@@ -322,7 +326,7 @@ class CultivationTests(unittest.IsolatedAsyncioTestCase):
                 result = receive(ws)
                 self.assertIn('修为 10/30', result['text'])
                 self.assertNotIn('🎯', result['text'])
-                self.assertTrue(result['actions'])
+                self.assertFalse(result['actions'])
 
 
 if __name__ == '__main__':

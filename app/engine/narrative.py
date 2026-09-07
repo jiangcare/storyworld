@@ -15,10 +15,11 @@ from ..ai import narrative as ai
 from ..ai.policy import InputRejected, check_player_input, normalized
 from ..ai.conversation import ConversationReply, fallback_reply, social_reply
 from ..db import begin_write
+from ..config import settings
 from ..models import PlayerAction, World, WorldPlayer
 from ..rules import engine as rules
 from .narrative_dsl import Condition, Effect, parse_spec
-from . import guidance, cultivation
+from . import guidance, cultivation, turn_summary
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,7 @@ def evaluate(content, state, progress, plan: ai.Plan, rng=None):
     """在副本上计算；失败的后续动作停止，已执行步骤仍产生真实后果。"""
     plan = ai.Plan.model_validate(plan.model_dump())
     spec = parse_spec(content)
+    before_state, before_minute = state, progress['minute']
     state, progress = copy.deepcopy(state), copy.deepcopy(progress)
     results = []
     for action in plan.actions:
@@ -204,6 +206,8 @@ def evaluate(content, state, progress, plan: ai.Plan, rng=None):
                "ending": progress["ending"]}
     if spec.sandbox:
         receipt["cultivation"] = cultivation.status(state)
+    receipt['summary'] = turn_summary.changes(content, before_state, state, progress['minute'] - before_minute,
+                                               revived=any(r.get('revival') for r in results))
     return state, progress, receipt
 
 
@@ -214,14 +218,11 @@ def format_receipt(receipt):
         if "check" in result:
             line += f"（成功率 {result['check']['chance']:.0%}，{'成功' if result['check']['success'] else '失败'}）"
         lines.append(line)
-    lines.append(f"⏱ 已过 {receipt['minute']} 分钟 · 生命 {receipt['hp']} · 已自动保存")
-    if receipt.get("cultivation"):
-        lines.append(receipt["cultivation"])
     if receipt["ending"]:
         lines.append(f"🏁 {receipt['ending']}")
     elif receipt["paused"]:
         lines.append("⏸ 关键事件暂停，等待你自由输入决定。")
-    return "\n".join(lines)
+    return "\n\n".join(lines)
 
 
 async def take_turn(db, world, player, text, *, advance=False, choice_token=None):
@@ -247,7 +248,9 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
     if cultivation.enabled(content):
         reply = cultivation.query(text, content, player.private_state)
         if reply:
-            return True, reply + "\n查看这些信息不消耗游戏时间。"
+            return True, reply
+        if clean in ('开始修炼', '继续打坐', '开始打坐'):
+            explicit = ai.Plan(actions=[ai.Action(kind='interact', target='meditate')])
         for key, loc in parse_spec(content).locations.items():
             if clean in ("去" + loc.name, "前往" + loc.name, "走到" + loc.name):
                 explicit = ai.Plan(actions=[ai.Action(kind="move", target=key)])
@@ -266,6 +269,9 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
         break
     previous = copy.deepcopy(world.progress_json["narrative"])
     context = context_for(content, player.private_state, previous)
+    recent = list(db.scalars(select(PlayerAction.outcome).where(
+        PlayerAction.world_id == world_id, PlayerAction.user_id == user_id, PlayerAction.outcome.is_not(None)
+    ).order_by(PlayerAction.id.desc()).limit(2)))
     # 释放读取事务，LLM 网络等待不占用数据库行锁。
     db.rollback()
     try:
@@ -327,15 +333,20 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
         logger.exception("单人事务未提交")
         return False, "本次行动未能保存，世界未改变，请重试。"
 
-    if cultivation.enabled(content) or (len(plan.actions) == 1 and plan.actions[0].kind == "interact"
+    sandbox = cultivation.enabled(content)
+    if (all(not r.get('ok') and not r.get('minutes') for r in receipt['results'])
+            or (sandbox and not settings.deepseek_api_key)) or (not sandbox and len(plan.actions) == 1 and plan.actions[0].kind == "interact"
             and parse_spec(content).interactions.get(plan.actions[0].target)
             and parse_spec(content).interactions[plan.actions[0].target].verbatim):
         return True, fallback
 
     try:
-        # 叙述上下文不包含尚未执行的交互，回执始终随文显示供玩家核对。
-        narration = await ai.narrate(text, {"world": context["world"], "character": player.character_name}, receipt)
-        outcome = narration + "\n\n—— 世界记录 ——\n" + fallback
+        # 不传玩家原文或未来事件；最近已保存的叙述帮助衔接场景、避免重复措辞。
+        narration = await ai.narrate(text, {"world": context["world"], "character": player.character_name,
+                                           "location": parse_spec(content).locations[state['location']].model_dump(),
+                                           "recent": [entry[-1200:] for entry in reversed(recent)],
+                                           "sandbox": sandbox}, receipt)
+        outcome = turn_summary.with_narration(narration, receipt)
         record = db.get(PlayerAction, record_id)
         record.outcome = outcome
         db.commit()
