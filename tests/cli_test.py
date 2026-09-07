@@ -163,6 +163,26 @@ class CLITests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(control, output)
         self.assertIn('正常', output)
 
+    def test_check_ai_diagnoses_without_network_or_creating_save(self):
+        root = Path(__file__).resolve().parent.parent
+        with TemporaryDirectory(prefix='storyworld-ai-check-') as directory:
+            database = Path(directory) / 'untouched.db'
+            env = dict(os.environ, DATABASE_URL='sqlite:///' + str(database),
+                       AI_BACKEND='direct', DEEPSEEK_API_KEY='', PYTHONIOENCODING='utf-8')
+            command = [sys.executable, str(root / 'run_cli.py'), '--check-ai']
+            missing = subprocess.run(command, text=True, encoding='utf-8', stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, env=env, cwd=directory, timeout=15)
+            self.assertEqual(missing.returncode, 2)
+            self.assertIn('missing_api_key', missing.stdout)
+            self.assertIn(str(root / '.env'), missing.stdout)
+            env['DEEPSEEK_API_KEY'] = 'test-secret-never-send-to-provider'
+            configured = subprocess.run(command, text=True, encoding='utf-8', stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, env=env, cwd=directory, timeout=15)
+            self.assertEqual(configured.returncode, 0)
+            self.assertIn('尚未验证', configured.stdout)
+            self.assertNotIn(env['DEEPSEEK_API_KEY'], configured.stdout + configured.stderr)
+            self.assertFalse(database.exists())
+
     def test_real_entrypoint_accepts_stdin_and_reopens_save_without_services(self):
         root = Path(__file__).resolve().parent.parent
         with TemporaryDirectory(prefix='storyworld-cli-process-') as directory:

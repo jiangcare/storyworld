@@ -12,8 +12,10 @@ from datetime import datetime
 from sqlalchemy import select
 
 from ..ai import narrative as ai
+from ..ai.client import LLMError
+from ..ai.diagnostics import report_failure, failure_reply
 from ..ai.policy import InputRejected, check_player_input, normalized
-from ..ai.conversation import ConversationReply, fallback_reply, social_reply
+from ..ai.conversation import ConversationReply, social_reply
 from ..db import begin_write
 from ..config import settings
 from ..models import PlayerAction, World, WorldPlayer
@@ -294,9 +296,12 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
         return False, str(exc)
     except InputRejected as exc:
         return False, str(exc)
+    except LLMError as exc:
+        report_failure(exc.code, exc)
+        return False, failure_reply(exc.code)
     except Exception as exc:
-        logger.warning("单人意图未能完成：%s", type(exc).__name__)
-        return False, fallback_reply(context, unavailable=True)
+        report_failure('invalid_ai_response', exc)
+        return False, failure_reply('invalid_ai_response')
 
     try:
         begin_write(db)

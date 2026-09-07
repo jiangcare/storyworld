@@ -63,8 +63,9 @@ class HarnessTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_key_and_sdk_do_not_silently_fall_back(self):
         with patch.object(settings, "deepseek_api_key", ""), \
                 patch.object(HarnessBackend, "generate", AsyncMock()) as generate:
-            with self.assertRaisesRegex(LLMError, "DEEPSEEK_API_KEY"):
+            with self.assertRaisesRegex(LLMError, "DEEPSEEK_API_KEY") as missing:
                 await LLMClient().chat_json("system", "user")
+            self.assertEqual(missing.exception.code, "missing_api_key")
             generate.assert_not_called()
         with patch.object(HarnessBackend, "generate", AsyncMock(side_effect=HarnessError("SDK 缺失"))) as generate, \
                 patch("app.ai.client.AsyncOpenAI") as direct:

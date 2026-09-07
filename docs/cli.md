@@ -83,3 +83,9 @@ python tests/cli_test.py
 ## 直接试玩小说切片
 
 `python run_cli.py --demo` 直接呈现雨幕便利店正文，使用独立 `novel-demo` 档案。无需操作，每30秒继续一段，二十段后在介入点停住。随时自由输入；新一轮用 `--profile 新档案名`。固定节奏不受 `/autonomy narrative=...` 改速（0仍暂停），也不循环重播。详见 [体验规格](novel-vertical-slice.md)。
+
+## AI 故障排查
+
+执行 `python run_cli.py --check-ai` 检查配置位置、密钥是否已配置和 Harness 是否可加载（不联网、不输出密钥）。缺少配置时退出码为2。启动时会提示同一问题，仍允许阅读作者正文及使用离线动作。项目 `.env` 按项目根目录读取，不受启动目录影响；环境变量优先。
+
+CLI 的 AI 故障写入 `data/logs/cli-ai.log`，按大小轮转。日志只含固定错误码、后端名和异常类型，不含玩家输入、密钥及 SDK 原始诊断。`missing_api_key` 是未配置密钥，`harness_setup` 是环境未就绪，`invalid_ai_response` 是响应验收失败；这些情况不再伪装成“请说清想做什么”。

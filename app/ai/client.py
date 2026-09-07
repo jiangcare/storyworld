@@ -14,7 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 class LLMError(Exception):
-    pass
+    def __init__(self, message, *, code='ai_unavailable'):
+        super().__init__(message)
+        self.code = code
 
 
 class LLMClient:
@@ -32,8 +34,8 @@ class LLMClient:
         retries: int = 2,
     ) -> dict:
         """调用模型并要求返回 JSON 对象（response_format=json_object）。"""
-        if not settings.deepseek_api_key:
-            raise LLMError("尚未配置 DEEPSEEK_API_KEY")
+        if not settings.deepseek_api_key.strip():
+            raise LLMError("尚未配置 DEEPSEEK_API_KEY", code="missing_api_key")
         if settings.ai_backend == "direct" and self._client is None:
             self._client = AsyncOpenAI(
                 api_key=settings.deepseek_api_key,
@@ -63,7 +65,7 @@ class LLMClient:
                     raise LLMError("模型返回非 JSON 对象")
                 return data
             except HarnessError as exc:
-                raise LLMError(str(exc)) from None
+                raise LLMError(str(exc), code=exc.code) from None
             except Exception as e:  # noqa: BLE001
                 last_err = e
                 logger.warning("LLM 调用失败(第%s次): %s", attempt + 1, type(e).__name__)

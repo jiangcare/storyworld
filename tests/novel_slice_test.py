@@ -184,6 +184,39 @@ class NovelSliceTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('矿泉水 ×3', second.stdout)
             self.assertNotIn(OPENING, second.stdout)
 
+    async def test_ai_failures_have_diagnostics_and_do_not_blame_player_or_change_state(self):
+        from app.ai.client import LLMError
+        from app.ai.diagnostics import configure_cli_log, logger
+        before = copy.deepcopy((self.player.private_state, self.world.progress_json))
+        secret = 'sensitive-provider-response-do-not-log'
+        with TemporaryDirectory(prefix='ai-error-log-') as directory:
+            path = configure_cli_log(Path(directory) / 'ai.log')
+            try:
+                cases = [(LLMError(secret, code='missing_api_key'), 'DEEPSEEK_API_KEY'),
+                         (LLMError(secret, code='harness_setup'), '运行环境'),
+                         (LLMError(secret), '服务暂时'), (ValueError(secret), '未能正常生成')]
+                for error, expected in cases:
+                    with patch.object(client, 'chat_json', AsyncMock(side_effect=error)):
+                        ok, text = await self.say('我想看看窗边有什么')
+                    self.assertFalse(ok)
+                    self.assertIn(expected, text)
+                    self.assertNotIn('请说清', text)
+                    self.assertNotIn(secret, text)
+                    self.assertEqual(before, (self.player.private_state, self.world.progress_json))
+                log = path.read_text()
+                self.assertIn('code=missing_api_key', log)
+                self.assertIn('code=harness_setup', log)
+                self.assertIn('code=invalid_ai_response', log)
+                self.assertNotIn(secret, log)
+                self.assertNotIn('我想看看', log)
+            finally:
+                for handler in logger.handlers[:]:
+                    if getattr(handler, '_storyworld_cli', False):
+                        logger.removeHandler(handler)
+                        handler.close()
+                logger.propagate = True
+        self.assertEqual(self.db.query(PlayerAction).count(), 0)
+
     def test_contract_examples_and_branch_schema_are_enforced(self):
         for text in ['TIME: 18:46 → 18:48', '事件触发：丧尸群到达。', '王强恐惧值增加18。',
                      '时间经过2分钟。', '【系统】获得矿泉水×3。', 'Inventory updated']:

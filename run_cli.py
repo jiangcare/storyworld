@@ -103,6 +103,7 @@ async def play(channel, reader=input, *, demo=False):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='在终端中游玩 StoryWorld 单人剧本')
+    parser.add_argument('--check-ai', action='store_true', help='检查本地 AI 配置与 Harness 环境，不发送网络请求')
     parser.add_argument('--demo', action='store_true', help='直接进入雨幕便利店小说 Demo，默认使用独立 novel-demo 档案')
     parser.add_argument('--profile', default=None, help='本地档案名，默认 default；相同名称恢复同一存档')
     args = parser.parse_args(argv)
@@ -115,6 +116,24 @@ def main(argv=None):
             stream.reconfigure(encoding='utf-8', errors='replace')
     logging.basicConfig(level=logging.CRITICAL)
     try:
+        from app.ai.diagnostics import configuration_issues, configure_cli_log, report_failure
+        issues = configuration_issues()
+        log_path = configure_cli_log()
+        for code, detail in issues:
+            report_failure(code)
+        if args.check_ai:
+            from app.config import PROJECT_ROOT, settings
+            print(f'配置文件：{PROJECT_ROOT / ".env"}')
+            print(f'AI 后端：{settings.ai_backend}；模型：{settings.deepseek_model}')
+            for code, detail in issues:
+                print(f'{code}: {detail}')
+            print(f'诊断日志：{log_path}')
+            if not issues:
+                print('本地配置检查通过；尚未验证 API 网络、密钥有效性或额度。')
+            return 2 if issues else 0
+        if issues:
+            print('AI 暂不可用：' + ' '.join(detail for _, detail in issues))
+            print(f'仍可阅读作者正文和使用离线动作。诊断日志：{log_path}\n')
         prepare_database()
         asyncio.run(play(CLIChannel(name), demo=args.demo))
     except KeyboardInterrupt:

@@ -17,19 +17,21 @@ PLUGIN_DIR = Path(__file__).resolve().parent / "harness"
 
 
 class HarnessError(RuntimeError):
-    pass
+    def __init__(self, message, *, code='harness_failed'):
+        super().__init__(message)
+        self.code = code
 
 
 def _load_harness():
     if sys.version_info < (3, 10):
-        raise HarnessError("DeepSeek Harness 需要 Python 3.10+；请在兼容环境安装 requirements-harness.txt")
+        raise HarnessError("DeepSeek Harness 需要 Python 3.10+；请在兼容环境安装 requirements-harness.txt", code="harness_setup")
     try:
         from importlib.metadata import version
         from deepseek_harness import DeepSeekHarness
     except ImportError as exc:
-        raise HarnessError("尚未安装 DeepSeek Harness，请安装 requirements-harness.txt") from exc
+        raise HarnessError("尚未安装 DeepSeek Harness，请安装 requirements-harness.txt", code="harness_setup") from exc
     if version("deepseek-harness-sdk") != SDK_VERSION:
-        raise HarnessError(f"请使用已验证的 deepseek-harness-sdk=={SDK_VERSION}")
+        raise HarnessError(f"请使用已验证的 deepseek-harness-sdk=={SDK_VERSION}", code="harness_setup")
     return DeepSeekHarness
 
 

@@ -110,8 +110,12 @@ class ConversationTests(unittest.IsolatedAsyncioTestCase):
                 _, response = await self.say('那个然后就这样吧')
             self.assertNotIn('secret diagnostic', response)
             self.assertNotIn('无法把这段意图', response)
-            self.assertIn('钟楼广场', response)
-            self.assertIn('补充一句', response)
+            if isinstance(data, dict) and data.get('scope') == 'out_of_scope':
+                self.assertIn('钟楼广场', response)
+                self.assertIn('补充一句', response)
+            else:
+                self.assertIn('未能正常生成', response)
+                self.assertNotIn('补充一句', response)
             self.assertEqual(before, self.snapshot())
 
     async def test_legacy_mode_preserves_conversation_and_does_not_consume_points(self):
