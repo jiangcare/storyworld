@@ -16,6 +16,7 @@ CLI_HELP = """🎮 StoryWorld 命令行
 /guide 游戏玩法         /log 查看经历      /continue 等待5分钟
 /settle 结算旧版单人剧本的一天（即时剧本不需要）
 /help 命令说明          /quit 退出（每次行动已经自动保存）
+/pause 暂停叙事         /stream on 恢复叙事    /autonomy 自主性设置
 基础指令和选项可离线使用；自由表达与旧版每日剧情需要配置 AI。"""
 
 
@@ -40,6 +41,10 @@ class CLIChannel(Channel):
         self.output = output if output is not None else sys.stdout
         self.actions: list[Action] = []
         self.message_id = 0
+        self.streaming_open = False
+
+    def stream_present(self, user_id):
+        return self.streaming_open and user_id == self.user_id
 
     def write(self, text):
         # 剧本/模型文本不应成为终端控制序列（清屏、改标题、OSC 剪贴板等）。

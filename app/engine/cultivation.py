@@ -191,3 +191,51 @@ def social(text):
     if clean in ("?", "？", "???", "？？？", "迷茫", "不懂", "不知道", "我不知道", "看不懂", "没看懂"):
         return "这里可以按自己的兴趣慢慢修行。想安静一点，可以在洞府说‘修炼’；想出门走走，可以说‘地图’。也可以告诉我哪句话没看懂，我给你解释。"
     return None
+
+
+LOCATION_PROSE = {
+    'cave': '石室里的凉意迎面漫来。蒲团仍放在原处，门缝透进一线微光，落在粗糙的石地上。',
+    'valley': '溪水从草丛间穿过，湿润的泥土气息随着山风送来。低垂的叶尖沾着露水，轻轻碰上衣角。',
+    'market': '沿街的说话声渐渐清晰起来。布幡在摊位上方翻动，药香、尘土与炉火的气味混在一起。',
+    'alchemy': '丹房的热气扑上面颊。炉火在暗处缓慢明灭，石台边残留着一股苦涩的药香。',
+    'forge': '越过门槛，金铁相击的余响便贴着墙壁传来。炉口泛着红光，空气干燥而灼热。',
+    'sect': '山门前的石阶被来往脚步磨得发亮。铜铃挂在高处，风过时轻轻响了一声。',
+    'wilds': '树影渐密，雾气贴着地面流动。枯叶在脚下发出轻响，林深处偶尔传来难以分辨的动静。',
+    'mine': '矿道里透着潮气。赤色的矿纹隐在石壁间，水滴敲在浅洼里，隔一阵才响一次。',
+    'ruins': '断墙的影子横在地上。残损的阵纹间积满尘土，风一吹，细灰便沿着石缝散开。',
+}
+
+
+def prose_for(result):
+    """从作者正文取展示段；数值回执依旧保留在 text / receipt，不发给 Narrator UI。"""
+    text, target = result['text'], result.get('target', '')
+    if result.get('revival'):
+        return text.split('\n\n')[0]
+    if not result.get('ok') and not result.get('minutes'):
+        if '修为' in text:
+            return '你试着收拢灵力，气息却仍有些散。眼下还不是冲关的时候。'
+        if '物品不足' in text:
+            return '你翻检了一遍储物袋，所需的材料还凑不齐，只得暂时停下手中的事。'
+        if '需要在' in text:
+            return text.split('。')[0] + '。'
+        return text
+    if result.get('kind') == 'move':
+        return LOCATION_PROSE.get(target, text)
+    if result.get('kind') == 'look':
+        return result.get('location_prose', text)
+    if result.get('kind') == 'rest':
+        return '你慢慢放缓呼吸，让绷紧的身体松弛下来。周围的声响渐渐清晰，气息也稳了些。'
+    if result.get('kind') == 'wait':
+        return '你暂且留在原处。片刻的安静里，远近的声音渐渐分出了层次。'
+    if target.startswith('sell_'):
+        return '你把要出售的东西放到摊前。许掌柜仔细验看过，拨出灵石推到你面前，随即将货物收进柜中。'
+    if target.startswith('buy_'):
+        return '你将灵石递过去。许掌柜点清后，把选好的东西包妥递来，手指在包口轻轻压了一下。'
+    return text.split('\n\n')[0].split('\n消耗：')[0]
+
+
+OPENING_PROSE = ('石门推开，青岚山色从门缝间一点点展开。山风带着草木的凉意掠过衣袖，'
+                '远处坊市的布幡在薄雾里隐约翻动。\n\n'
+                '身后的洞府还很简陋。蒲团搁在石地上，储物袋靠着墙角，袋口透出淡淡的药香。'
+                '体内那缕初成的灵气尚且微弱，只有静下心来，才能辨清它在经脉间缓缓流动的暖意。\n\n'
+                '山道向谷口蜿蜒而去。石阶旁，一滴露水终于从草尖滑落。')

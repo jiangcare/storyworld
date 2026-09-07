@@ -39,6 +39,8 @@ async def run() -> None:
         else:
             bot = Bot(token=settings.telegram_bot_token)
         tg = TelegramChannel(bot)
+        from app.engine import stream
+        asyncio.create_task(stream.run(tg))
         channels.append(tg)
         dp = Dispatcher()
         dp.include_router(tg.build_router())

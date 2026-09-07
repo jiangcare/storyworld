@@ -1,5 +1,6 @@
 """Bot 入口：长轮询 + 每日 tick 调度（经通道抽象）。"""
 import logging
+import asyncio
 
 from aiogram import Bot, Dispatcher
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -50,4 +51,12 @@ async def main() -> None:
     logger.info("tick 调度器已启动（每 %s 秒扫描）", settings.tick_scan_seconds)
 
     logger.info("Telegram 通道开始长轮询（本地部署，无需域名）……")
-    await dp.start_polling(bot)
+    from ..engine import stream
+    from contextlib import suppress
+    task = asyncio.create_task(stream.run(channel))
+    try:
+        await dp.start_polling(bot)
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task

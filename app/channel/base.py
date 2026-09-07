@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Optional, Sequence
 
 from .types import Action, ChannelCapabilities, ChannelEvent
@@ -15,6 +16,15 @@ class Channel:
     """文字交互通道抽象。子类实现各平台的具体收发。"""
 
     capabilities = ChannelCapabilities()
+
+    def note_activity(self, user_id):
+        if not hasattr(self, '_stream_activity'):
+            self._stream_activity = {}
+        self._stream_activity[user_id] = time.time()
+
+    def stream_present(self, user_id):
+        # 无在线状态的聊天渠道只在最近一次玩家交互后的15分钟主动叙述。
+        return time.time() - getattr(self, '_stream_activity', {}).get(user_id, 0) < 900
 
     # ---------- 发送 ----------
 

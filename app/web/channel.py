@@ -30,6 +30,9 @@ class WebChannel(Channel):
         self._conns: dict[str, set] = {}
         self._lock = asyncio.Lock()
 
+    def stream_present(self, user_id):
+        return bool(self._conns.get(self.conv_for_user(user_id)))
+
     # ---------------- 会话解析 ----------------
 
     @staticmethod

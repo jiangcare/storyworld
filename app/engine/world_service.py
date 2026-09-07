@@ -359,13 +359,21 @@ def build_canon_summary(db: Session, world: World, limit: int = 12) -> str:
     return "\n".join(f"[第{e.day}天] {e.content}" for e in events)
 
 
+def recent_passages(db, world, player, limit=2):
+    from ..models import NarrativeBeat
+    actions = list(db.scalars(select(PlayerAction).where(
+        PlayerAction.world_id == world.id, PlayerAction.user_id == player.user_id,
+        PlayerAction.outcome.is_not(None)).order_by(PlayerAction.id.desc()).limit(limit)))
+    beats = list(db.scalars(select(NarrativeBeat).where(NarrativeBeat.world_id == world.id,
+        NarrativeBeat.user_id == player.user_id).order_by(NarrativeBeat.id.desc()).limit(limit)))
+    entries = [((a.intent or {}).get('revision', 0), a.created_at, a.outcome) for a in actions]
+    entries += [(b.revision, b.created_at, b.text) for b in beats]
+    return [text for _, _, text in sorted(entries)[-limit:]]
+
+
 def build_player_recent(db: Session, world: World, player: WorldPlayer, limit: int = 2) -> str:
     if narrative.enabled(world.script.content_json):
-        actions = list(db.scalars(select(PlayerAction).where(
-            PlayerAction.world_id == world.id, PlayerAction.user_id == player.user_id,
-            PlayerAction.outcome.is_not(None),
-        ).order_by(PlayerAction.id.desc()).limit(limit)))
-        return "\n---\n".join(a.outcome for a in reversed(actions))
+        return "\n\n".join(recent_passages(db, world, player, limit))
     scenes = list(
         db.scalars(
             select(Scene)

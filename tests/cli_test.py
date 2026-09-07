@@ -61,13 +61,15 @@ class CLITests(unittest.IsolatedAsyncioTestCase):
         await self.channel.submit('/guide', self.flow)
         index = next(i for i, action in enumerate(self.channel.actions, 1) if '静坐修炼' in action.label)
         await self.channel.submit(str(index), self.flow)
-        self.assertIn('修为 +10', self.output.getvalue())
+        self.assertIn('经脉', self.output.getvalue())
         self.db.refresh(player)
         self.assertEqual(player.private_state['cultivation']['practice'], 10)
         self.assertEqual(self.db.query(PlayerAction).count(), 1)
         self.assertEqual(self.db.get(User, player.user_id).platform, 'cli')
         resumed = CLIChannel('青岚客', output=io.StringIO())
         await resumed.welcome(GameFlow(resumed))
+        self.assertIn('经脉', resumed.output.getvalue())
+        await resumed.submit('/status', GameFlow(resumed))
         self.assertIn('修为 10/30', resumed.output.getvalue())
         self.assertIn('长生录', resumed.output.getvalue())
         self.assertFalse(resumed.actions)
@@ -170,8 +172,8 @@ class CLITests(unittest.IsolatedAsyncioTestCase):
             first = subprocess.run(command, input='1\n修炼\n/quit\n', text=True, encoding='utf-8',
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=directory, timeout=30)
             self.assertEqual(first.returncode, 0, first.stderr)
-            self.assertIn('修为 +10', first.stdout)
-            second = subprocess.run(command, input='/quit\n', text=True, encoding='utf-8',
+            self.assertIn('经脉', first.stdout)
+            second = subprocess.run(command, input='/status\n/quit\n', text=True, encoding='utf-8',
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=directory, timeout=30)
             self.assertEqual(second.returncode, 0, second.stderr)
             self.assertIn('修为 10/30', second.stdout)

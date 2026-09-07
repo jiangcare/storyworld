@@ -11,7 +11,7 @@ from ..channel.base import Channel
 from ..channel.types import Action, ChannelEvent, parse_command
 from ..config import settings
 from ..db import SessionLocal, get_store
-from ..engine import guidance, narrative, world_service
+from ..engine import guidance, narrative, world_service, cultivation
 from ..models import Scene, Script, World, WorldPlayer
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,16 @@ class GameFlow:
     # ============ 入口 ============
 
     async def dispatch(self, ev: ChannelEvent) -> None:
+        from ..engine import stream
+        channel = _ch(ev)
+        if isinstance(channel, Channel):
+            channel.note_activity(ev.user_id)
+        async with stream.input_turn(ev.platform, ev.user_id):
+            if isinstance(channel, Channel):
+                await stream.flush_pending(channel, ev.user_id)
+            await self._dispatch(ev)
+
+    async def _dispatch(self, ev: ChannelEvent) -> None:
         if ev.payload:
             await self._handle_action(ev, ev.payload)
             return
@@ -168,6 +178,14 @@ class GameFlow:
                 await self._do_action(ev, arg)
             elif cmd == "status":
                 await self._cmd_status(ev, db)
+            elif cmd in ('pause', 'stream', 'autonomy', 'pass'):
+                from ..engine import stream
+                user = world_service.get_or_create_user(db, ev.user_id, platform=ev.platform)
+                world = world_service.get_active_world(db, user.id, None if ev.is_private else ev.chat_id)
+                if world is None or world.owner_id != user.id:
+                    await _ch(ev).send(ev.chat_id, '当前没有属于你的进行中世界。')
+                else:
+                    await _ch(ev).send(ev.chat_id, stream.control(db, world, cmd, arg))
             elif cmd == "log":
                 await self._cmd_log(ev, db)
             elif cmd in ("continue", "resume"):
@@ -295,8 +313,8 @@ class GameFlow:
             text = world_service.build_player_status_message(player, world, world.script.content_json)
             recent = world_service.build_player_recent(db, world, player, limit=1)
             if not recent and narrative.enabled(world.script.content_json):
-                recent = world.script.content_json["narrative"]["opening"]
-            await self._send_play(ev, db, world, player, recent + "\n\n" + text)
+                recent = cultivation.OPENING_PROSE if cultivation.enabled(world.script.content_json) else world.script.content_json["narrative"]["opening"]
+            await self._send_play(ev, db, world, player, recent or "暂无新的经历。")
         elif narrative.enabled(world.script.content_json):
             _, text = await narrative.take_turn(db, world, player, "继续观察", advance=True)
             await self._send_play(ev, db, world, player, text)
@@ -414,8 +432,7 @@ class GameFlow:
                         ev, db, world, world.players[0],
                         f"🌍 单人世界【{world.title}】已开始！\n"
                         f"你是{world.players[0].character_name}。\n\n"
-                        + script.content_json["narrative"]["opening"]
-                        + "\n\n直接描述你的行动即可。需要选项时输入 /guide；/status 查看角色。进度会自动保存。",
+                        + (cultivation.OPENING_PROSE if cultivation.enabled(script.content_json) else script.content_json["narrative"]["opening"]),
                     )
                     return
                 await _ch(ev).send(

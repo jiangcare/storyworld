@@ -41,15 +41,3 @@ def changes(content, before, after, elapsed, *, revived=False):
     if elapsed:
         parts.append(f'经过{elapsed}分钟')
     return ' · '.join(parts)
-
-
-def ending(receipt):
-    if receipt['ending']:
-        return receipt['ending']
-    if receipt['paused']:
-        return '关键事件暂停，等待你的决定。'
-    return ''
-
-
-def with_narration(text, receipt):
-    return '\n\n'.join(part for part in (text, receipt.get('summary', ''), ending(receipt)) if part)

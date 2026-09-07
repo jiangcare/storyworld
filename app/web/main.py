@@ -38,7 +38,16 @@ async def lifespan(_app: FastAPI):
     if get_flow() is None:
         GameFlow(web_channel)
     logger.info("Web 通道就绪：http://127.0.0.1:8081/web")
-    yield
+    from ..engine import stream
+    import asyncio
+    from contextlib import suppress
+    task = asyncio.create_task(stream.run(web_channel))
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 
 app = FastAPI(title="StoryWorld Web", lifespan=lifespan)

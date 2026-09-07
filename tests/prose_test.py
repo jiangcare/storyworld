@@ -56,7 +56,7 @@ class ProseTests(unittest.IsolatedAsyncioTestCase):
         for text in (first, second):
             self.assert_prose(text)
             self.assertIn('经脉', text)
-            self.assertIn('修为 +10', text)
+            self.assertNotIn('修为 +10', text)
             self.assertLess(len(text), 300)
         self.assertNotEqual(first.split('\n\n')[0], second.split('\n\n')[0])
         self.assertEqual(self.player.private_state['cultivation']['practice'], 20)
@@ -104,7 +104,7 @@ class ProseTests(unittest.IsolatedAsyncioTestCase):
             result = await self.dispatch('修炼')
         self.assert_prose(result)
         self.assertEqual(result.count('灵气缓缓'), 1)
-        self.assertEqual(result.count('修为 +10'), 1)
+        self.assertEqual(result.count('修为 +10'), 0)
         record = self.db.query(PlayerAction).order_by(PlayerAction.id.desc()).first()
         self.assertEqual(record.outcome, result)
         self.assertIn('cultivation', record.intent['receipt'])  # 完整回执仍存档
@@ -121,7 +121,7 @@ class ProseTests(unittest.IsolatedAsyncioTestCase):
     async def test_failed_action_is_concise_and_does_not_call_narrator(self):
         with patch.object(settings, 'deepseek_api_key', 'test-only'), patch.object(ai, 'narrate', AsyncMock()) as narrator:
             result = await self.dispatch('突破')
-        self.assertIn('还不足以突破', result)
+        self.assertIn('还不是冲关的时候', result)
         self.assert_prose(result)
         self.assertLess(len(result), 100)
         narrator.assert_not_called()

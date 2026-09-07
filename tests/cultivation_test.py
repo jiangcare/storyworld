@@ -76,14 +76,16 @@ class CultivationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(validate_script(bad))
 
     async def test_growth_is_immediate_and_breakthrough_is_player_choice(self):
-        for _ in range(3):
-            self.assertIn('修为 +10', await self.act('修炼'))
+        for step in range(3):
+            result = await self.act('修炼')
+            self.assertNotIn('修为 +', result)
+            self.assertEqual(self.player.private_state['cultivation']['practice'], (step + 1) * 10)
         self.assertEqual(self.player.private_state['cultivation']['rank'], 0)
         self.assertEqual(self.player.private_state['level'], 1)
         with patch('app.engine.cultivation.random.random', return_value=0):
             result = await self.act('突破')
-        self.assertIn('晋入炼气2层', result)
-        self.assertIn('消耗：灵石 ×3', result)
+        self.assertIn('灵气骤然贯通', result)
+        self.assertNotIn('消耗：灵石 ×3', result)
         self.assertEqual(self.player.private_state['inventory']['stone'], 9)
         self.assertEqual(self.player.private_state['cultivation']['practice'], 0)
         self.assertEqual(self.player.private_state['level'], 2)
@@ -93,19 +95,22 @@ class CultivationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_gather_trade_alchemy_and_consumption_form_persistent_loop(self):
         await self.act('去青岚谷')
-        self.assertIn('灵草 ×2', await self.act('采药'))
+        self.assertIn('灵草', await self.act('采药'))
+        self.assertEqual(self.player.private_state['inventory']['herb'], 5)
         await self.act('去青石坊市')
         await self.act('卖灵草')
         await self.act('去百草丹房')
-        self.assertIn('养气丹 ×1', await self.act('炼丹'))
+        self.assertIn('丹药', await self.act('炼丹'))
+        self.assertEqual(self.player.private_state['inventory']['qi_pill'], 1)
         self.assertEqual(self.player.private_state['inventory']['herb'], 1)
         self.assertEqual(self.player.private_state['inventory']['stone'], 13)
         self.assertEqual(self.player.private_state['cultivation']['alchemy'], 1)
-        self.assertIn('修为 +30', await self.act('吃养气丹'))
+        self.assertIn('暖流', await self.act('吃养气丹'))
+        self.assertEqual(self.player.private_state['cultivation']['practice'], 30)
         self.assertEqual(self.player.private_state['inventory']['qi_pill'], 0)
         before = copy.deepcopy(self.player.private_state)
         minute = self.world.progress_json['narrative']['minute']
-        self.assertIn('物品不足', await self.act('吃养气丹'))
+        self.assertIn('材料还凑不齐', await self.act('吃养气丹'))
         self.assertEqual(before, self.player.private_state)
         self.assertEqual(minute, self.world.progress_json['narrative']['minute'])
 
@@ -125,18 +130,22 @@ class CultivationTests(unittest.IsolatedAsyncioTestCase):
         for _ in range(2):
             await self.act('挖矿')
         await self.act('去听火器坊')
-        self.assertIn('护身符 ×1', await self.act('炼器'))
+        self.assertIn('符面微微一亮', await self.act('炼器'))
+        self.assertEqual(self.player.private_state['inventory']['talisman'], 1)
         await self.act('去赤铁矿脉')
         await self.act('去雾隐荒山')
         with patch('app.engine.cultivation.random.random', return_value=0):
             result = await self.act('历练')
-        self.assertIn('抵挡8点伤害', result)
+        self.assertNotIn('抵挡8点伤害', result)
         self.assertEqual(self.player.private_state['hp'], 20)
         self.assertEqual(self.player.private_state['inventory']['talisman'], 0)
         await self.act('去青岚谷')
         await self.act('去无名洞府')
-        self.assertIn('洞府升至 1 级', await self.act('扩建洞府'))
-        self.assertIn('修为 +12', await self.act('修炼'))
+        self.assertIn('灵气开始缓缓收拢', await self.act('扩建洞府'))
+        self.assertEqual(self.player.private_state['cultivation']['cave'], 1)
+        before_practice = self.player.private_state['cultivation']['practice']
+        await self.act('修炼')
+        self.assertEqual(self.player.private_state['cultivation']['practice'], before_practice + 12)
         self.assertEqual(self.player.private_state['inventory']['ore'], 0)
 
     async def test_repeated_revival_keeps_growth_and_stops_old_plan(self):
@@ -152,8 +161,8 @@ class CultivationTests(unittest.IsolatedAsyncioTestCase):
         self.parser.return_value = plan
         with patch('app.engine.cultivation.random.random', return_value=.99):
             result = await self.act('探险之后回去修炼')
-        self.assertIn('洞府复苏', result)
-        self.assertIn('灵石损失 2', result)
+        self.assertIn('洞府冰凉的石地', result)
+        self.assertEqual(self.player.private_state['inventory']['stone'], 9)
         self.assertEqual(self.player.private_state['location'], 'cave')
         self.assertEqual(self.player.private_state['cultivation']['practice'], 25)
         self.assertEqual(self.player.private_state['cultivation']['alchemy'], 9)
@@ -230,7 +239,8 @@ class CultivationTests(unittest.IsolatedAsyncioTestCase):
         idx = next(i for i, c in enumerate(choices, 1) if c['target'] == 'meditate')
         ok, result = await narrative.take_turn(self.db, self.world, self.player, str(idx), choice_token=token)
         self.assertTrue(ok)
-        self.assertIn('修为 +10', result)
+        self.assertIn('经脉', result)
+        self.assertEqual(self.player.private_state['cultivation']['practice'], 10)
         before = copy.deepcopy((self.player.private_state, self.world.progress_json))
         ok, _ = await narrative.take_turn(self.db, self.world, self.player, str(idx), choice_token=token)
         self.assertFalse(ok)
@@ -283,7 +293,7 @@ class CultivationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(channel.send.call_args.kwargs.get('actions'))
             else:
                 self.assertFalse(channel.send.call_args.kwargs.get('actions'))
-        self.assertIn('修为 +10', output)
+        self.assertIn('经脉', output)
         self.assertFalse(channel.send.call_args.kwargs.get('actions'))
         self.assertLess(len(output), 4096)
 
@@ -319,12 +329,14 @@ class CultivationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn('长生录', opening['text'])
                 self.assertNotIn('🎯', opening['text'])
                 ws.send_json({'type': 'text', 'text': '修炼'})
-                self.assertIn('修为 +10', receive(ws)['text'])
+                self.assertIn('经脉', receive(ws)['text'])
             with client.websocket_connect(f'/ws/web?conv={conv}', headers=headers) as ws:
                 ws.receive_json()
                 ws.send_json({'type': 'text', 'text': '/resume'})
                 result = receive(ws)
-                self.assertIn('修为 10/30', result['text'])
+                self.assertIn('经脉', result['text'])
+                ws.send_json({'type': 'text', 'text': '/status'})
+                self.assertIn('修为 10/30', receive(ws)['text'])
                 self.assertNotIn('🎯', result['text'])
                 self.assertFalse(result['actions'])
 

@@ -147,6 +147,20 @@ class CanonEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
+class NarrativeBeat(Base):
+    """自主世界事件与持久投递队列；不伪装成玩家行动。"""
+    __tablename__ = 'narrative_beats'
+    __table_args__ = (Index('uq_beat_world_revision', 'world_id', 'revision', unique=True),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    world_id: Mapped[int] = mapped_column(ForeignKey('worlds.id'), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), index=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    receipt: Mapped[dict] = mapped_column(JSON)
+    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
 class Scene(Base):
     """每个玩家每天的个人场景（私聊推送的内容）。"""
 

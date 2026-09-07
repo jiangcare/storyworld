@@ -58,9 +58,45 @@ class Anchor(Spec):
     resume_flag: Optional[str] = None
 
 
+class NPCWorldChange(Spec):
+    location: str
+    activity: str = Field(min_length=1, max_length=120)
+    fear_delta: int = Field(default=0, ge=-100, le=100)
+
+
+class StreamBeat(Spec):
+    text: str = Field(min_length=1, max_length=1500)
+    minutes: int = Field(default=1, ge=1, le=10)
+    weather: Optional[str] = Field(default=None, max_length=80)
+    npcs: dict[str, NPCWorldChange] = Field(default_factory=dict, max_length=20)
+    intervention: bool = False
+    minimum_world_autonomy: int = Field(default=0, ge=0, le=100)
+    player_detail: str = Field(default='', max_length=150)
+
+
+class StreamSpec(Spec):
+    world_autonomy: int = Field(default=95, ge=0, le=100)
+    player_autonomy: int = Field(default=30, ge=0, le=100)
+    narrative_autonomy: int = Field(default=85, ge=0, le=100)
+    scenes: dict[str, list[StreamBeat]] = Field(min_length=1, max_length=100)
+
+    @model_validator(mode='after')
+    def bounded(self):
+        if any(not beats or len(beats) > 20 for beats in self.scenes.values()):
+            raise ValueError('每个地点需要1-20个世界事件')
+        from ..ai.prose_contract import validate_prose
+        for beats in self.scenes.values():
+            for beat in beats:
+                validate_prose(beat.text)
+                if beat.player_detail:
+                    validate_prose(beat.player_detail)
+        return self
+
+
 class NarrativeSpec(Spec):
     version: Literal[2] = 2
     sandbox: Optional[Literal["cultivation"]] = None
+    stream: Optional[StreamSpec] = None
     start: str
     opening: str = Field(min_length=1, max_length=2000)
     locations: dict[str, Location] = Field(min_length=1, max_length=100)
@@ -71,6 +107,8 @@ class NarrativeSpec(Spec):
 
     @model_validator(mode="after")
     def references(self):
+        if self.stream and self.anchors:
+            raise ValueError('叙事流事件不能混用旧版时间锚点，请将世界事件写入 stream')
         if self.start not in self.locations:
             raise ValueError("start 必须引用已有地点")
         for loc in self.locations.values():
@@ -114,6 +152,13 @@ def parse_spec(content: dict) -> NarrativeSpec:
     if spec.sandbox and not {"stone", "herb", "ore", "qi_pill", "heal_pill", "talisman"} <= item_ids:
         raise ValueError("修仙沙盒缺少基础物品模板")
     npc_ids = {n["id"] for n in content.get("npcs", [])}
+    if spec.stream:
+        if set(spec.stream.scenes) - set(spec.locations):
+            raise ValueError('叙事流必须引用已知地点')
+        for beats in spec.stream.scenes.values():
+            for beat in beats:
+                if set(beat.npcs) - npc_ids or any(n.location not in spec.locations for n in beat.npcs.values()):
+                    raise ValueError('世界事件必须引用已知 NPC 和地点')
     for interaction in spec.interactions.values():
         if interaction.check and interaction.check not in checks:
             raise ValueError("交互引用了不存在的检定")

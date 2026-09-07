@@ -5,6 +5,8 @@ import argparse
 import asyncio
 import logging
 import sys
+import threading
+from contextlib import suppress
 
 from app.channel.cli import CLIChannel, profile_name
 
@@ -19,23 +21,54 @@ def prepare_database():
         db.commit()
 
 
+async def read_line(reader, prompt):
+    """终端读入不占用事件循环；守护线程不会让 Ctrl+C 退出卡在 input。"""
+    loop = asyncio.get_running_loop()
+    future = loop.create_future()
+    def publish(value=None, error=None):
+        if not future.done():
+            if error is not None:
+                future.set_exception(error)
+            else:
+                future.set_result(value)
+    def read():
+        try:
+            value = reader(prompt)
+        except BaseException as exc:
+            error = EOFError() if isinstance(exc, StopIteration) else exc
+            with suppress(RuntimeError):
+                loop.call_soon_threadsafe(publish, None, error)
+        else:
+            with suppress(RuntimeError):
+                loop.call_soon_threadsafe(publish, value)
+    threading.Thread(target=read, daemon=True).start()
+    return await future
+
+
 async def play(channel, reader=input):
     from app.game.flow import GameFlow
+    from app.engine import stream
     flow = GameFlow(channel)
     await channel.welcome(flow)
-    while True:
-        try:
-            # 终端专用事件循环没有后台调度；等待输入不会推进世界或占用数据库事务。
-            text = reader('\n你 > ')
-        except (EOFError, KeyboardInterrupt):
-            break
-        try:
-            if not await channel.submit(text, flow):
+    channel.streaming_open = True
+    task = asyncio.create_task(stream.run(channel))
+    try:
+        while True:
+            try:
+                text = await read_line(reader, '\n你 > ')
+            except (EOFError, KeyboardInterrupt):
                 break
-        except Exception:
-            # 引擎可能已经提交状态；不能声称保存失败，也不自动重放动作。
-            channel.actions = []
-            channel.write('刚才的请求未能完整显示。请用 /resume 核对已保存的结果，再决定下一步。')
+            try:
+                if not await channel.submit(text, flow):
+                    break
+            except Exception:
+                channel.actions = []
+                channel.write('刚才的请求未能完整显示。请用 /resume 核对已保存的结果，再决定下一步。')
+    finally:
+        channel.streaming_open = False
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
     channel.write('\n已退出。再次使用相同 --profile 启动即可继续已保存的旅程。')
 
 

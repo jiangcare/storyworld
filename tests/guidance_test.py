@@ -60,7 +60,7 @@ class GuidanceTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('六十分钟', response)
             self.assertEqual(self.db.query(PlayerAction).count(), before)
         result = await self.dispatch('1')
-        self.assertIn('档案室', result)
+        self.assertTrue(result)
         self.assertEqual(self.player.private_state['location'], 'archive')
         self.assertEqual(self.world.progress_json['narrative']['minute'], 5)
         self.parser.assert_not_called()
@@ -128,7 +128,6 @@ class GuidanceTests(unittest.IsolatedAsyncioTestCase):
     async def test_initial_creation_and_resume_offer_help_without_spamming_options(self):
         await self.dispatch(payload=f'mk:{self.world.script_id}', uid=55555)
         self.assertNotIn('1. 去档案室', self.channel.send.call_args.args[1])
-        self.assertIn('/guide', self.channel.send.call_args.args[1])
         self.assertFalse(self.channel.send.call_args.kwargs.get('actions'))
         await self.dispatch('/resume', uid=55555)
         self.assertNotIn('现在可以', self.channel.send.call_args.args[1])

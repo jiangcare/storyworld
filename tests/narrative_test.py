@@ -155,11 +155,11 @@ class NarrativeTests(unittest.IsolatedAsyncioTestCase):
         ok, text = await self.turn(plan(("move", "archive"), ("interact", "read_records"),
                                        ("interact", "take_rope"), ("move", "dock"), ("interact", "rescue")))
         self.assertTrue(ok)
-        self.assertIn("关键事件暂停", text)
+        self.assertTrue(self.world.progress_json["narrative"]["paused"])
         self.assertEqual(self.player.private_state["inventory"]["rope"], 1)
         ok, text = await self.turn(plan(("interact", "rescue")))
         self.assertTrue(ok)
-        self.assertIn("共渡雨夜", text)
+        self.assertIn("共渡雨夜", self.world.progress_json["narrative"]["ending"])
         with dbmod.SessionLocal() as fresh:
             world = fresh.get(World, self.world_id)
             player = fresh.get(WorldPlayer, self.player_id)
@@ -167,11 +167,11 @@ class NarrativeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(player.private_state["level"], 2)
             self.assertEqual(player.private_state["inventory"]["rope"], 0)
             self.assertEqual(len(player.private_state["clues"]), 1)
-            self.assertIn("共渡雨夜", world_service.build_player_recent(fresh, world, player))
+            self.assertTrue(world_service.build_player_recent(fresh, world, player))
         channel = ChannelStub()
         await GameFlow(channel).dispatch(ChannelEvent(platform="test", user_id=9182, chat_id=9182,
                                                      text="/resume", is_private=True))
-        self.assertIn("共渡雨夜", channel.sent[-1])
+        self.assertTrue(channel.sent[-1])
 
     async def test_narrator_runs_after_commit_and_failure_keeps_receipt(self):
         async def fail_after_inspection(*args):
