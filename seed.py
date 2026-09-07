@@ -1,4 +1,5 @@
 """初始化数据库并写入种子剧本。"""
+import copy
 import json
 import logging
 
@@ -191,6 +192,10 @@ SEED_SCRIPTS = [
 ]
 
 
+from app.engine.lighthouse import realtime_edition
+
+LEGACY_LIGHTHOUSE = copy.deepcopy(SEED_SCRIPTS[1])
+SEED_SCRIPTS[1] = realtime_edition(LEGACY_LIGHTHOUSE)
 SEED_SCRIPTS.append(SEED_DEMO)
 
 

@@ -12,7 +12,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from ..ai import narrative as ai
-from ..ai.policy import InputRejected, check_player_input
+from ..ai.policy import InputRejected, check_player_input, normalized
 from ..ai.conversation import ConversationReply, fallback_reply, social_reply
 from ..db import begin_write
 from ..models import PlayerAction, World, WorldPlayer
@@ -200,10 +200,23 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
     social = social_reply(text)
     if social:
         return True, social
+    if guidance.is_location_question(text):
+        spec = parse_spec(world.script.content_json)
+        loc = spec.locations[player.private_state["location"]]
+        return True, f"你现在在{loc.name}，扮演{player.character_name}（{player.character_role}）。\n{loc.description}"
     if guidance.is_help(text):
         return True, "你可以探索环境、寻找线索，并决定角色的行动。查看引导不会推进时间。"
     world_id, player_id, user_id = world.id, player.id, player.user_id
     content = copy.deepcopy(world.script.content_json)
+    explicit = None
+    clean = normalized(text).strip().rstrip("?？!！。.")
+    for key, interaction in parse_spec(content).interactions.items():
+        if clean not in interaction.aliases or not matches(interaction.requires, player.private_state, world.progress_json["narrative"]):
+            continue
+        if key in world.progress_json["narrative"]["done"] and interaction.repeat_text:
+            return True, interaction.repeat_text + "\n这条线索已经记录，重读不消耗时间。"
+        explicit = ai.Plan(actions=[ai.Action(kind="interact", target=key)])
+        break
     previous = copy.deepcopy(world.progress_json["narrative"])
     context = context_for(content, player.private_state, previous)
     # 释放读取事务，LLM 网络等待不占用数据库行锁。
@@ -217,6 +230,8 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
                 plan = await guidance.resolve(world, player, index, choice_token)
             except ValueError as exc:
                 return False, str(exc)
+        elif explicit is not None:
+            plan = explicit
         elif text.strip() in ("继续观察", "观察四周", "观察", "看看周围"):
             plan = ai.Plan(actions=[ai.Action(kind="look")])
         else:
@@ -264,6 +279,11 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
         db.rollback()
         logger.exception("单人事务未提交")
         return False, "本次行动未能保存，世界未改变，请重试。"
+
+    if (len(plan.actions) == 1 and plan.actions[0].kind == "interact"
+            and parse_spec(content).interactions.get(plan.actions[0].target)
+            and parse_spec(content).interactions[plan.actions[0].target].verbatim):
+        return True, fallback
 
     try:
         # 叙述上下文不包含尚未执行的交互，回执始终随文显示供玩家核对。

@@ -73,15 +73,15 @@ def main():
             assert "单人世界" in got["text"], got
 
             # 自由文本 = 行动
-            ws.send_json({"type": "text", "text": "我去检查地下室"})
+            ws.send_json({"type": "text", "text": "漂流瓶的信写的是什么"})
             got = recv_until_type(ws, "msg")
-            assert "已记录" in got["text"], got
+            assert "你父亲不是死于意外" in got["text"], got
 
         # ---- 历史持久化 ----
         r = client.get(f"/api/web/conv/{conv}/messages?after=0", headers=hdr)
         assert r.status_code == 200
         texts = "\n".join(m["text"] for m in r.json())
-        assert "已记录" in texts and "StoryWorld" in texts, "历史应包含对话"
+        assert "你父亲不是死于意外" in texts and "StoryWorld" in texts, "历史应包含对话"
 
         # ---- 房间：A 创建 → B 加入 → 多人世界 → 广播 ----
         rr = client.post("/api/web/room", json={"name": "副本测试房"}, headers=hdr)

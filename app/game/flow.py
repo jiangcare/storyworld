@@ -135,7 +135,7 @@ class GameFlow:
                     await _ch(ev).send(ev.chat_id, "暂无可用剧本。")
                     return
                 lines = [
-                    f"{'👤' if s.mode == 'single' else '👥'} {s.title}（{s.genre}，{s.days}天）\n{s.description}"
+                    f"{'👤' if s.mode == 'single' else '👥'} {s.title}（{s.genre}，{'即时行动' if narrative.enabled(s.content_json) else '每日结算'}）\n{s.description}"
                     for s in scripts
                 ]
                 await _ch(ev).send(
@@ -273,6 +273,8 @@ class GameFlow:
         await _ch(ev).send(ev.chat_id, "\n".join(parts))
 
     async def _cmd_narrative(self, ev: ChannelEvent, db, cmd: str) -> None:
+        from ..engine.script_upgrades import upgrade_lighthouse
+        upgrade_lighthouse(db)
         user = world_service.get_or_create_user(
             db, ev.user_id, platform=ev.platform,
             username=ev.username, display_name=ev.display_name,
@@ -379,6 +381,8 @@ class GameFlow:
     async def _act_create_world(self, ev: ChannelEvent, script_id: str) -> None:
         db = SessionLocal()
         try:
+            from ..engine.script_upgrades import upgrade_lighthouse
+            upgrade_lighthouse(db)
             script = db.get(Script, int(script_id))
             if script is None or script.status != "approved":
                 await _ch(ev).ack(ev, "剧本不存在或已下架。", alert=True)
@@ -559,7 +563,7 @@ class GameFlow:
                     await _ch(ev).ack(ev, "暂无可用剧本。")
                     return
                 lines = [
-                    f"{'👤' if s.mode == 'single' else '👥'} {s.title}（{s.genre}，{s.days}天）"
+                    f"{'👤' if s.mode == 'single' else '👥'} {s.title}（{s.genre}，{'即时行动' if narrative.enabled(s.content_json) else '每日结算'}）"
                     for s in scripts
                 ]
                 await _ch(ev).send(

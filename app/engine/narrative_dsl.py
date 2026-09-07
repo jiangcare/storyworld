@@ -34,6 +34,9 @@ class Location(Spec):
 
 
 class Interaction(Spec):
+    aliases: list[str] = Field(default_factory=list, max_length=30)
+    repeat_text: str = Field(default="", max_length=1000)
+    verbatim: bool = False
     label: str = Field(min_length=1, max_length=120)
     requires: Condition = Field(default_factory=Condition)
     minutes: int = Field(default=5, ge=1, le=60)

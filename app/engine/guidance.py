@@ -14,11 +14,17 @@ from .narrative_dsl import parse_spec
 _HELP = {"怎么玩", "这个游戏怎么玩", "游戏怎么玩", "这是要干嘛", "这是要干什么", "要干嘛",
          "我要干嘛", "我该干嘛", "我该做什么", "接下来做什么", "现在做什么", "不知道要干嘛",
          "不知道干什么", "不知道做什么", "帮助", "游戏帮助", "玩法", "游戏目标", "目标是什么",
+         "游戏规则是什么", "游戏规则时什么", "游戏规则", "规则是什么", "规则",
+         "都说说", "都说一下", "详细说说", "具体说说",
          "有什么可以做", "我能做什么", "提示", "给我提示", "help", "how to play"}
 
 
 def is_help(text):
     return normalized(text).strip().rstrip("?？!！。.").strip().lower() in _HELP
+
+
+def is_location_question(text):
+    return normalized(text).strip().rstrip("?？!！。.") in {"这是哪", "这是哪里", "这里是哪", "这里是哪里", "我在哪", "我在哪里"}
 
 
 def number(text):
@@ -65,6 +71,8 @@ def render(world, player, choices, *, explain=False):
     if progress["ending"]:
         return "本次旅程已结束。用 /resume 重读结局，或 /scripts 开始新的故事。"
     lines = [f"🎯 当前目标：{objective(content, world.day)}"]
+    if progress["revision"] <= 1 and world.progress_json.get("legacy_daily"):
+        lines.append("已衔接到即时探索版。此前待结算的输入保留在历史中，接下来的探索会当场返回结果。")
     if explain:
         lines += [content.get("world", {}).get("background", ""),
                   "你扮演故事里的角色：探索、寻找线索，再决定怎么行动。",

@@ -60,6 +60,8 @@ def get_or_create_user(
 # ---------------- 剧本 ----------------
 
 def list_approved_scripts(db: Session, mode: str | None = None) -> list[Script]:
+    from .script_upgrades import upgrade_lighthouse
+    upgrade_lighthouse(db)
     q = select(Script).where(Script.status == "approved").order_by(Script.id.desc())
     if mode:
         q = q.where(Script.mode == mode)
@@ -180,6 +182,8 @@ def start_world(db: Session, world: World) -> World:
 
 def get_active_world(db: Session, user_id: int, chat_id: int | None = None) -> World | None:
     """获取用户当前进行中的世界。群聊优先按 chat_id，私聊取最近加入的。"""
+    from .script_upgrades import upgrade_lighthouse
+    upgrade_lighthouse(db)
     q = (
         select(World)
         .join(WorldPlayer, WorldPlayer.world_id == World.id)
@@ -209,6 +213,8 @@ async def record_action(
     db: Session, world: World, player: WorldPlayer, text: str
 ) -> tuple[bool, str]:
     """记录玩家当日行动（受行动点限制）。返回 (是否成功, 消息)。"""
+    from .script_upgrades import upgrade_lighthouse
+    upgrade_lighthouse(db)
     if world.status != "running":
         return False, "当前世界不在进行中。"
     if player.status != "alive":
@@ -225,11 +231,15 @@ async def record_action(
         return await narrative.take_turn(db, world, player, text)
 
     from . import guidance
+    if guidance.is_location_question(text):
+        setting = world.script.content_json.get("world", {})
+        return True, f"你身处{setting.get('name', world.title)}，扮演{player.character_name}。\n{setting.get('background', '')}"
     if guidance.is_help(text):
         return True, (f"🎯 当前目标：{guidance.objective(world.script.content_json, world.day)}\n"
                       "这是每日推进的故事：描述角色想尝试的行动，记录后在每日结算看到结果。"
                       "可用 /status 查看状态、/log 回顾剧情。")
     world_id, player_id, expected_day = world.id, player.id, world.day
+    expected_script_id = world.script_id
     # 快速拒绝已无行动点的请求，避免每次无效提交都消耗 AI 调用；提交时仍原子复查。
     used = db.scalar(select(func.count(PlayerAction.id)).where(
         PlayerAction.world_id == world_id, PlayerAction.user_id == player.user_id,
@@ -254,6 +264,9 @@ async def record_action(
         begin_write(db)
         db.refresh(world)
         db.refresh(player)
+        if world.script_id != expected_script_id:
+            db.rollback()
+            return False, "故事版本刚刚更新，请用 /status 看看当前场景，再重新描述这次行动。"
         if world.status != "running" or world.day != expected_day or player.status != "alive" or player.world_id != world_id:
             db.rollback()
             return False, "世界或角色当前不能行动。"
@@ -277,7 +290,7 @@ async def record_action(
         return False, "行动未能保存，请稍后重试。"
     used += 1
     left = settings.max_action_points - used
-    return True, f"已记录你的行动（第{day}天）。今日剩余行动点：{left}。"
+    return True, f"已记录你的行动（第{day}天）。今日剩余行动点：{left}。\n这个世界采用每日结算，行动结果会在下一次剧情推送时出现。想即时探索，可用 /scripts 选择标注‘即时行动’的剧本。"
 
 
 async def parse_action_intent(text: str, context: dict | None = None, *, raise_errors=False) -> dict | None:

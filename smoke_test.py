@@ -152,10 +152,11 @@ async def main():
     assert ps.character_card["id"] == single.content_json["player_cards"][0]["id"], "单人应继承主角卡"
     world_service.start_world(db, ws)
     r2 = await run_tick(db, ws.id)
-    assert r2 is not None
-    ws2 = db.get(World, ws.id)
-    assert ws2.day == 2
-    print("[OK] 单人世界：创建/继承主角卡/首次tick")
+    assert r2 is None, "即时单人不参与每日 tick"
+    ok, result = await world_service.record_action(db, ws, ps, "读信")
+    assert ok and "你父亲不是死于意外" in result
+    assert ws.progress_json["narrative"]["minute"] == 1
+    print("[OK] 单人世界：创建/继承主角卡/即时读信")
 
     # ---------- 剧本 AI 完善 ----------
     content = await script_ai_mod.complete_script("一个末日世界，几个人，有倒计时", "multi")

@@ -108,8 +108,8 @@ async def main():
 
     # 3) 私聊自由文本 = 行动（文本优先）
     ch.sent.clear()
-    await flow.dispatch(ev(1, 100, text="我去检查地下室"))
-    assert any("已记录" in t for _, t, _ in ch.sent), "自由文本应记为行动"
+    await flow.dispatch(ev(1, 100, text="漂流瓶的信写的是什么"))
+    assert any("你父亲不是死于意外" in t for _, t, _ in ch.sent), "读信应立即返回原文"
 
     # 4) 多人创建限制：私聊点多人 → 拒绝
     multi = db.query(Script).filter(Script.mode == "multi").first()
