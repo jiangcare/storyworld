@@ -10,7 +10,7 @@ from ..channel.base import Channel
 from ..channel.types import Action, ChannelEvent, parse_command
 from ..config import settings
 from ..db import SessionLocal, get_store
-from ..engine import narrative, world_service
+from ..engine import guidance, narrative, world_service
 from ..models import Scene, Script, World, WorldPlayer
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,8 @@ HELP_TEXT = """🎮 StoryWorld · AI 互动小说世界
 /act <你的行动> 执行行动（群内也可直接回复机器人消息）
 /status 查看角色状态
 /log 前情提要
-/continue 继续观察世界（关键节点暂停）
+/guide 当前目标、玩法与可执行选项（不耗时）
+/continue 等待5分钟，推进局势（关键节点暂停）
 /resume 恢复最近的旅程、查看状态与上一段剧情
 /upload <剧本草稿> 上传你自己的剧本，AI 帮你完善后提交审核
 
@@ -103,12 +104,27 @@ class GameFlow:
         # 私聊里的自由文本 = 行动（文本优先交互）
         await self._do_action(ev, ev.text)
 
+    async def _send_play(self, ev, db, world, player, text, *, explain=False):
+        if player is None or not narrative.enabled(world.script.content_json):
+            await _ch(ev).send(ev.chat_id, text)
+            return
+        # 最新存档决定可执行选项；读事务不跨本地存储写操作。
+        db.refresh(world)
+        db.refresh(player)
+        db.commit()
+        choices, token = await guidance.remember(world, player)
+        buttons = [Action(f"{i}. {choice['label']}", f"pick:{world.id}:{token}:{i}")
+                   for i, choice in enumerate(choices, 1)]
+        await _ch(ev).send(ev.chat_id, text + "\n\n" + guidance.render(world, player, choices, explain=explain), actions=buttons)
+
     # ============ 命令 ============
 
     async def _handle_command(self, ev: ChannelEvent, cmd: str, arg: str) -> None:
         db = SessionLocal()
         try:
-            if cmd in ("start", "help"):
+            if cmd in ("help", "guide"):
+                await self._do_action(ev, "怎么玩")
+            elif cmd == "start":
                 await _ch(ev).send(
                     ev.chat_id, HELP_TEXT, actions=menu_actions()
                 )
@@ -229,7 +245,7 @@ class GameFlow:
         text = world_service.build_player_status_message(
             player, world, world.script.content_json
         )
-        await _ch(ev).send(ev.chat_id, text)
+        await self._send_play(ev, db, world, player, text)
 
     async def _cmd_log(self, ev: ChannelEvent, db) -> None:
         user = world_service.get_or_create_user(
@@ -276,10 +292,10 @@ class GameFlow:
             recent = world_service.build_player_recent(db, world, player, limit=1)
             if not recent and narrative.enabled(world.script.content_json):
                 recent = world.script.content_json["narrative"]["opening"]
-            await _ch(ev).send(ev.chat_id, text + "\n\n" + recent)
+            await self._send_play(ev, db, world, player, recent + "\n\n" + text)
         elif narrative.enabled(world.script.content_json):
             _, text = await narrative.take_turn(db, world, player, "继续观察", advance=True)
-            await _ch(ev).send(ev.chat_id, text)
+            await self._send_play(ev, db, world, player, text)
         else:
             await _ch(ev).send(ev.chat_id, "这个剧本按每日节奏推进。可用 /log 重读剧情，或用 /scripts 选择即时单人体验。")
 
@@ -321,7 +337,7 @@ class GameFlow:
             if world is None:
                 await _ch(ev).send(
                     ev.chat_id,
-                    "你当前没有进行中的世界。用 /scripts 或 /create_world 开始吧。",
+                    HELP_TEXT if guidance.is_help(text) else "你当前没有进行中的世界。用 /scripts 或 /create_world 开始吧。",
                 )
                 return
             player = world_service.get_player(db, world, user.id)
@@ -329,7 +345,7 @@ class GameFlow:
                 await _ch(ev).send(ev.chat_id, "你不是这个世界的玩家。")
                 return
             ok, msg = await world_service.record_action(db, world, player, text)
-            await _ch(ev).send(ev.chat_id, msg)
+            await self._send_play(ev, db, world, player, msg, explain=guidance.is_help(text))
         finally:
             db.close()
 
@@ -338,6 +354,8 @@ class GameFlow:
     async def _handle_action(self, ev: ChannelEvent, payload: str) -> None:
         if payload.startswith("mk:"):
             await self._act_create_world(ev, payload[3:])
+        elif payload.startswith("pick:"):
+            await self._act_pick(ev, payload[5:])
         elif payload.startswith("act:"):
             await self._act_suggested(ev, payload[4:])
         elif payload.startswith("freetext:"):
@@ -379,12 +397,13 @@ class GameFlow:
                 world_service.start_world(db, world)
                 await _ch(ev).ack(ev, "世界已创建！")
                 if narrative.enabled(script.content_json):
-                    await _ch(ev).send(
-                        ev.chat_id,
+                    await self._send_play(
+                        ev, db, world, world.players[0],
                         f"🌍 单人世界【{world.title}】已开始！\n"
                         f"你是{world.players[0].character_name}。\n\n"
                         + script.content_json["narrative"]["opening"]
                         + "\n\n每次行动自动保存；/status 查看角色，/resume 恢复旅程。",
+                        explain=True,
                     )
                     return
                 await _ch(ev).send(
@@ -403,6 +422,28 @@ class GameFlow:
                     f"让朋友们发 /join 加入（{script.max_players}人上限），满员自动开始，或输入 /start_world 立即开始。\n"
                     f"开始后每天 {world.push_hour:02d}:{world.push_minute:02d} 推送世界剧情。",
                 )
+        finally:
+            db.close()
+
+    async def _act_pick(self, ev, data):
+        try:
+            world_id, token, index = data.split(":")
+            world_id, index = int(world_id), int(index)
+        except ValueError:
+            await _ch(ev).ack(ev, "选项无效。", alert=True)
+            return
+        db = SessionLocal()
+        try:
+            user = world_service.get_or_create_user(db, ev.user_id, platform=ev.platform)
+            world = db.get(World, world_id)
+            player = world_service.get_player(db, world, user.id) if world else None
+            if (not world or not player or not narrative.enabled(world.script.content_json)
+                    or world.status != "running" or player.status != "alive"):
+                await _ch(ev).ack(ev, "这个选项不可用，请用 /resume 查看你的旅程。", alert=True)
+                return
+            await _ch(ev).ack(ev, "正在处理选择……")
+            _, text = await narrative.take_turn(db, world, player, str(index), choice_token=token)
+            await self._send_play(ev, db, world, player, text)
         finally:
             db.close()
 
@@ -538,7 +579,7 @@ class GameFlow:
                     if player
                     else "你不是这个世界的玩家。"
                 )
-                await _ch(ev).send(ev.chat_id, text)
+                await self._send_play(ev, db, world, player, text)
             elif section == "log":
                 user = world_service.get_or_create_user(
                     db, ev.user_id, platform=ev.platform,

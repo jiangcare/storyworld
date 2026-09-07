@@ -220,6 +220,11 @@ async def record_action(
     if narrative.enabled(world.script.content_json):
         return await narrative.take_turn(db, world, player, text)
 
+    from . import guidance
+    if guidance.is_help(text):
+        return True, (f"🎯 当前目标：{guidance.objective(world.script.content_json, world.day)}\n"
+                      "这是每日推进的故事：描述角色想尝试的行动，记录后在每日结算看到结果。"
+                      "可用 /status 查看状态、/log 回顾剧情。")
     world_id, player_id, expected_day = world.id, player.id, world.day
     # 快速拒绝已无行动点的请求，避免每次无效提交都消耗 AI 调用；提交时仍原子复查。
     used = db.scalar(select(func.count(PlayerAction.id)).where(
@@ -390,6 +395,7 @@ def build_player_status_message(player: WorldPlayer, world: World, content: dict
         names = {n["id"]: n["name"] for n in content.get("npcs", [])}
         return "\n".join([
             f"🧭 世界：{world.title}",
+            f"🎯 目标：{narrative.guidance.objective(content, world.day)}",
             f"🧬 角色：{player.character_name}（{player.character_role}）",
             f"📍 {spec.locations[s['location']].name} · 已过 {progress['minute']} 分钟",
             f"❤️ 生命：{s['hp']}/{s['max_hp']} · 等级 {s['level']} · 经验 {s['xp']}",

@@ -17,6 +17,7 @@ from ..db import begin_write
 from ..models import PlayerAction, World, WorldPlayer
 from ..rules import engine as rules
 from .narrative_dsl import Condition, Effect, parse_spec
+from . import guidance
 
 logger = logging.getLogger(__name__)
 
@@ -190,11 +191,13 @@ def format_receipt(receipt):
     return "\n".join(lines)
 
 
-async def take_turn(db, world, player, text, *, advance=False):
+async def take_turn(db, world, player, text, *, advance=False, choice_token=None):
     try:
         check_player_input(text)
     except InputRejected as exc:
         return False, str(exc)
+    if guidance.is_help(text):
+        return True, "你可以探索环境、寻找线索，并决定角色的行动。查看引导不会推进时间。"
     world_id, player_id, user_id = world.id, player.id, player.user_id
     content = copy.deepcopy(world.script.content_json)
     previous = copy.deepcopy(world.progress_json["narrative"])
@@ -202,7 +205,18 @@ async def take_turn(db, world, player, text, *, advance=False):
     # 释放读取事务，LLM 网络等待不占用数据库行锁。
     db.rollback()
     try:
-        plan = ai.Plan(actions=[ai.Action(kind="wait")]) if advance else await ai.parse_plan(text, context)
+        index = guidance.number(text)
+        if advance:
+            plan = ai.Plan(actions=[ai.Action(kind="wait")])
+        elif index is not None:
+            try:
+                plan = await guidance.resolve(world, player, index, choice_token)
+            except ValueError as exc:
+                return False, str(exc)
+        elif text.strip() in ("继续观察", "观察四周", "观察", "看看周围"):
+            plan = ai.Plan(actions=[ai.Action(kind="look")])
+        else:
+            plan = await ai.parse_plan(text, context)
     except InputRejected as exc:
         return False, str(exc)
     except Exception:

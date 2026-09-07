@@ -55,12 +55,13 @@
   <div id="chat"><div class="splash">连接中…</div></div>
   <nav aria-label="冒险操作" style="display:flex;gap:8px;flex-wrap:wrap;padding:8px 16px">
     <button class="ghost" onclick="sendText('/scripts')">📜 选择世界</button>
-    <button class="ghost" onclick="sendText('/continue')">▶ 继续观察</button>
+    <button class="ghost" onclick="sendText('/guide')">🧭 目标与玩法</button>
+    <button class="ghost" onclick="sendText('/continue')">⏱ 等待5分钟</button>
     <button class="ghost" onclick="sendText('/status')">🧬 角色与背包</button>
     <button class="ghost" onclick="sendText('/resume')">💾 恢复旅程</button>
   </nav>
   <div id="inputbar">
-    <input id="input" placeholder="输入行动 / 命令（/act /status /log /upload …）" autocomplete="off">
+    <input id="input" placeholder="输入行动或选项编号；不知道做什么时输入“怎么玩”" autocomplete="off">
     <button id="send">发送</button>
   </div>
 </div>
