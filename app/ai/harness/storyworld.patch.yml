@@ -1,0 +1,30 @@
+# 验证版本：deepseek-harness-sdk/runtime-bin 0.1.2rc1。
+# sdk-minimal 是独立配置树，不隐式引入 Web、skills 或 subagents。
+- id: persistent-bash
+  disabled: true
+- id: persistent-pwsh
+  disabled: true
+- id: str-replace-editor
+  disabled: true
+- id: terminal-bash
+  disabled: true
+- id: terminal-pwsh
+  disabled: true
+- id: pty
+  disabled: true
+- id: subprocess
+  disabled: true
+- id: fs-local
+  disabled: true
+- id: session-log-deepseek
+  disabled: true
+- id: plugin-package-inventory-deepseek
+  disabled: true
+- id: llm-deepseek
+  config:
+    thinking: disabled
+    reasoningEffort: off
+    streamIdleTimeoutMs: 90000
+    retryPolicy:
+      mode: normal
+      maxRetries: 0

@@ -1,0 +1,4 @@
+# 官方 SDK 包含同版本原生运行时，不需要系统 Node.js。
+# Python >=3.10；Linux 需要 glibc >=2.28。
+-r requirements.txt
+deepseek-harness-sdk==0.1.2rc1

@@ -1,5 +1,6 @@
 """全局配置：从 .env / 环境变量读取。"""
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,12 +15,14 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
 
     # DeepSeek (OpenAI 兼容)
+    ai_backend: Literal["harness", "direct"] = "harness"
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-v4-flash"
     llm_temperature: float = 0.85
     llm_max_tokens: int = 1600
     llm_timeout: float = 90.0
+    harness_work_dir: str = "data/harness"
 
     # 相对路径始终以项目根目录为基准，独立启动 Web/Bot/后台也共享同一存档。
     database_url: str = "sqlite:///data/storyworld.db"

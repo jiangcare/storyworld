@@ -5,12 +5,12 @@
 > **多平台 · AI 实时生成 · 本地部署** 的文字冒险游戏平台：单人闯关、兄弟群多人、恋人剧本、论坛大型副本……引擎与游戏流平台无关，任何"能收发文字"的平台都能接入（Telegram / Web 已实现，QQ/钉钉适配器开发中）。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Python](https://img.shields.io/badge/Python-3.9+-blue)
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![CI](https://img.shields.io/github/actions/workflow/status/jiangcare/storyworld/ci.yml?branch=main)
 
 基于多通道的多人/单人 AI 文字冒险游戏平台。玩家创建/加入一个小说世界、继承角色卡，每天固定时间由 AI 自动推进剧情（世界事件 + 个人场景），玩家用**自由文字**行动，AI 理解意图并在次日结算。支持官方剧本与**用户上传剧本（AI 协助完善 + 后台审核）**。
 
-- **AI 生成**：DeepSeek（OpenAI 兼容接口），默认模型 `deepseek-v4-flash`（可在 `.env` 修改）
+- **AI 生成**：通过官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) SDK 管理调用，默认模型 `deepseek-v4-flash`，独立无工具会话与结构化 JSON 输出
 - **数据化玩法**：剧本预设（物品/能力/任务/主线）+ 运行时实体表（结构化提交）；**数值规则引擎**（JSON DSL：攻击/闪避/百分比加成/强化/抽奖/合成），每剧本规则可不同，AI 生成需过复杂度验收闸门
 - **存储**：SQLite（SQLAlchemy），游戏存档、登录会话、草稿和结算租约保存在本地文件，无需额外服务
 - **通道**：Telegram（aiogram 3 长轮询）+ Web（浏览器聊天室，含房间多人），本地部署无需域名/服务器
@@ -92,17 +92,17 @@ storyworld/
 
 ### 1. 安装和配置
 
-需要 Python 3.9+（带标准库 `sqlite3`），无需安装 MySQL、Redis 或 Docker。
+默认 Harness 模式需要 Python 3.10+（推荐 3.11，带标准库 `sqlite3`）；Linux 需要 glibc 2.28+。无需安装 MySQL、Redis 或 Docker。SDK 自带 Harness 运行时，无需额外启动 AI 网关或 Harness 网页。安装限制及旧环境兼容模式见 [AI 接入说明](docs/ai-harness.md)。
 
 ```bash
 python -m venv .venv
 # macOS / Linux
-.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements-harness.txt
 # Windows 则使用 .venv\Scripts\python
 cp .env.example .env
 ```
 
-编辑 `.env`，填写 `DEEPSEEK_API_KEY`；仅使用浏览器时可以留空 `TELEGRAM_BOT_TOKEN`。
+编辑 `.env`，填写 `DEEPSEEK_API_KEY`，保留 `AI_BACKEND=harness` 和 `DEEPSEEK_MODEL=deepseek-v4-flash`；仅使用浏览器时可以留空 `TELEGRAM_BOT_TOKEN`。
 数据库默认地址是 `DATABASE_URL=sqlite:///data/storyworld.db`，首次启动自动建库。相对路径始终以项目根目录为基准，分别启动 Web、Bot、后台也会共享同一个文件。
 
 ### 2. 初始化并启动
@@ -127,9 +127,10 @@ cp .env.example .env
 .venv/bin/python tests/sqlite_test.py
 .venv/bin/python tests/admin_test.py
 .venv/bin/python tests/local_storage_test.py
+.venv/bin/python tests/harness_test.py
 ```
 
-测试创建独立临时数据库，仅模拟 AI，不连接外部服务，也不改动实际存档。CI 执行相同测试。
+测试创建独立临时数据库，仅模拟 AI，不连接外部服务，也不改动实际存档。CI 另外在 Python 3.11 安装官方 SDK，使用本地模拟 DeepSeek HTTP 接口验证真实 Harness 运行时；复现方式见 [AI 接入说明](docs/ai-harness.md)。
 
 数据库使用 WAL 模式，运行时可能同时出现 `.db-wal` 和 `.db-shm` 文件。备份请使用 `python backup_db.py backups/storyworld.db`；该命令使用 SQLite 在线备份接口，不需要停机，且不会覆盖已有文件。存储路径、并发限制和旧数据说明见 [本地存储文档](docs/local-storage.md)。
 
@@ -204,8 +205,10 @@ cp .env.example .env
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | - | BotFather 获取 |
 | `DEEPSEEK_API_KEY` | - | DeepSeek 平台 Key |
+| `AI_BACKEND` | harness | 官方 Harness SDK；旧部署可显式选 direct |
 | `DEEPSEEK_BASE_URL` | https://api.deepseek.com | OpenAI 兼容地址 |
-| `DEEPSEEK_MODEL` | deepseek-v4-flash | 模型名（不支持则改 deepseek-chat） |
+| `DEEPSEEK_MODEL` | deepseek-v4-flash | DeepSeek 模型名，不自动降级 |
+| `HARNESS_WORK_DIR` | data/harness | 独立请求的临时工作目录，结束后清理 |
 | `DATABASE_URL` | sqlite:///data/storyworld.db | 本地 SQLite 文件地址 |
 | `ADMIN_USERNAME/PASSWORD` | admin/admin123 | 后台默认账号 |
 | `PUSH_HOUR/PUSH_MINUTE` | 20:00 | 每日推送时间 |

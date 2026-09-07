@@ -40,3 +40,19 @@ jobs:
         run: python tests/admin_test.py
       - name: Local persistence and concurrency test
         run: python tests/local_storage_test.py
+      - name: AI backend adapter test
+        run: python tests/harness_test.py
+
+  harness-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned official Harness SDK and runtime
+        run: pip install -r requirements-harness.txt
+      - name: Verify runtime against local DeepSeek API fixture
+        env:
+          STORYWORLD_TEST_HARNESS_RUNTIME: "1"
+        run: python tests/harness_test.py
