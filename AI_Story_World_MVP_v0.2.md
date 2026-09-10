@@ -18,7 +18,7 @@
 
 必须遵守 [Narrative Stream 与 Narrator Contract](docs/narrator-contract.md)。世界时钟不依赖玩家消息；World / Player / Narrative Autonomy 分开，默认95 / 30 / 85。正文不显示菜单、状态加减、助手式问题或机制提示；关键介入点自然停笔，重大角色决定由玩家掌握。以下旧流程描述只适用于玩家介入这一分支，不代表每段叙述必须等待输入。
 
-当前范围收敛为 [一个场景、三个 NPC、二十分钟世界时间的 Vertical Slice](docs/novel-vertical-slice.md)。以下平台功能属于已有实现或后续候选，不构成继续扩展的授权；先通过连续阅读和自由介入的体验验收。
+2026-09-10：当前产品形式以 [生成式文字世界设计](docs/generative-world-design.md) 为准。小场景用于验证未预写意图、AI 实时内容与持久后果；预设二十段仅作回归，不再定义目标体验。以下平台功能属于已有实现或后续候选；先通过真实模型自由交互与真人阅读验收。
 
 ## 1. 当前阶段最高原则
 
