@@ -21,7 +21,8 @@ from ..config import settings
 from ..models import PlayerAction, World, WorldPlayer
 from ..rules import engine as rules
 from .narrative_dsl import Condition, Effect, parse_spec
-from . import guidance, cultivation, turn_summary
+from . import guidance, cultivation, turn_summary, mechanics
+from ..rules.runtime import RuleError
 
 logger = logging.getLogger(__name__)
 
@@ -226,10 +227,28 @@ def format_receipt(receipt):
     return "\n\n".join(lines)
 
 
-async def take_turn(db, world, player, text, *, advance=False, choice_token=None):
+def request_replay(db, world_id, user_id, request_id, text):
+    if request_id is None:
+        return None
+    row = db.scalar(select(PlayerAction).where(PlayerAction.world_id == world_id,
+        PlayerAction.user_id == user_id, PlayerAction.intent['request_id'].as_string() == request_id).limit(1))
+    if row is None:
+        return None
+    if row.text != text:
+        raise RuleError('这条消息的内容与已保存记录不一致，请另发一条新消息。')
+    return row.outcome
+
+
+async def take_turn(db, world, player, text, *, advance=False, choice_token=None, request_id=None):
     try:
         check_player_input(text)
     except InputRejected as exc:
+        return False, str(exc)
+    try:
+        replay = request_replay(db, world.id, player.user_id, request_id, text)
+        if replay is not None:
+            return True, replay
+    except RuleError as exc:
         return False, str(exc)
     social = (cultivation.social(text) if cultivation.enabled(world.script.content_json) else None) or social_reply(text)
     if social and not parse_spec(world.script.content_json).stream:
@@ -245,6 +264,18 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
     world_id, player_id, user_id = world.id, player.id, player.user_id
     content = copy.deepcopy(world.script.content_json)
     explicit = None
+    prepared = None
+    try:
+        answer = mechanics.query(text, db, world, player)
+        if answer is not None:
+            return True, answer
+        runtime_context = mechanics.context(db, world, player)
+        if runtime_context:
+            target = mechanics.local_target(text, mechanics.specification(content), runtime_context['known_rules'])
+            if target:
+                explicit = ai.Plan(actions=[ai.Action(kind='interact', target=target)])
+    except RuleError as exc:
+        return False, str(exc)
     clean = normalized(text).strip().rstrip("?？!！。.")
     if cultivation.enabled(content):
         reply = cultivation.query(text, content, player.private_state)
@@ -272,6 +303,9 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
     context = context_for(content, player.private_state, previous)
     from .world_service import recent_passages
     recent = recent_passages(db, world, player, limit=2)
+    if runtime_context:
+        context['interactions'].update(runtime_context['targets'])
+        context['mechanics'] = runtime_context
     context['recent'] = recent
     context['flags'] = copy.deepcopy(previous['flags'])
     context['world_state'] = copy.deepcopy(world.progress_json.get('stream', {}).get('world', {}))
@@ -292,6 +326,13 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
             plan = ai.Plan(actions=[ai.Action(kind="look")])
         else:
             plan = await ai.parse_plan(text, context)
+        prepared = await mechanics.prepare(db, world, player, plan, previous['revision'])
+    except RuleError as exc:
+        try:
+            replay = request_replay(db, world_id, user_id, request_id, text)
+        except RuleError as conflict:
+            return False, str(conflict)
+        return (True, replay) if replay is not None else (False, str(exc))
     except ConversationReply as exc:
         return False, str(exc)
     except InputRejected as exc:
@@ -313,15 +354,25 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
         if world.status != "running" or player.status != "alive":
             db.rollback()
             return False, "这次旅程已经结束，可用 /resume 重读结局。"
+        replay = request_replay(db, world_id, user_id, request_id, text)
+        if replay is not None:
+            db.rollback()
+            return True, replay
         progress = world.progress_json["narrative"]
         if progress["revision"] != previous["revision"] or world.script.content_json != content:
             db.rollback()
             return False, "世界刚刚发生了变化，请查看 /status 后重新行动。"
-        state, progress, receipt = evaluate(content, player.private_state, progress, plan)
+        runtime_contract = None
+        if prepared is not None:
+            state, progress, receipt, runtime_contract = mechanics.execute(db, world, player, plan, prepared)
+        else:
+            state, progress, receipt = evaluate(content, player.private_state, progress, plan)
         progress["revision"] += 1
         from .stream import after_action
         updated_progress = copy.deepcopy(world.progress_json)
         updated_progress['narrative'] = progress
+        if runtime_contract is not None:
+            updated_progress['mechanics'] = runtime_contract
         after_action(updated_progress, receipt)
         world.progress_json = updated_progress
         player.private_state = state
@@ -334,10 +385,13 @@ async def take_turn(db, world, player, text, *, advance=False, choice_token=None
         fallback = format_receipt(receipt)
         record = PlayerAction(world_id=world_id, user_id=user_id, day=world.day, text=text,
                               intent={"actions": plan.model_dump()["actions"], "receipt": receipt,
-                                      "revision": progress["revision"]}, outcome=fallback)
+                                      "revision": progress["revision"], "request_id": request_id}, outcome=fallback)
         db.add(record)
         db.commit()  # 状态、检定、兜底结果同一事务持久化；只有此后才调用叙述者。
         record_id = record.id
+    except RuleError as exc:
+        db.rollback()
+        return False, str(exc)
     except Exception:
         db.rollback()
         logger.exception("单人事务未提交")

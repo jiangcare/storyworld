@@ -58,6 +58,8 @@ jobs:
         run: python tests/guidance_test.py
       - name: Game input and prompt injection boundaries
         run: python tests/game_boundary_test.py
+      - name: Runtime ability registration and fixed conflict resolution
+        run: python tests/runtime_rules_test.py
       - name: AI backend adapter test
         run: python tests/harness_test.py
 

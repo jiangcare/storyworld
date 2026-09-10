@@ -22,6 +22,10 @@ from app.models import PlayerAction, Script, World, WorldPlayer
 
 class CultivationTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        from app.config import settings
+        key = patch.object(settings, 'deepseek_api_key', '')
+        key.start()
+        self.addCleanup(key.stop)
         dbmod.Base.metadata.drop_all(dbmod.engine)
         dbmod.init_db()
         self.db = dbmod.SessionLocal()

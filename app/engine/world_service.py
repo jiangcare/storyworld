@@ -210,7 +210,7 @@ def get_player(db: Session, world: World, user_id: int) -> WorldPlayer | None:
 # ---------------- 行动 ----------------
 
 async def record_action(
-    db: Session, world: World, player: WorldPlayer, text: str
+    db: Session, world: World, player: WorldPlayer, text: str, *, request_id=None
 ) -> tuple[bool, str]:
     """记录玩家当日行动（受行动点限制）。返回 (是否成功, 消息)。"""
     from .script_upgrades import upgrade_lighthouse
@@ -225,7 +225,7 @@ async def record_action(
         return False, str(exc)
 
     if narrative.enabled(world.script.content_json):
-        return await narrative.take_turn(db, world, player, text)
+        return await narrative.take_turn(db, world, player, text, request_id=request_id)
     social = social_reply(text)
     if social:
         return True, social
@@ -438,6 +438,8 @@ def build_player_status_message(player: WorldPlayer, world: World, content: dict
                 f"🧬 角色：{player.character_name} · " + ("青岚宗外门弟子" if progress["flags"].get("sect_member") else "散修"),
                 f"📍 {spec.locations[s['location']].name} · 第 {world.day} 天 · 已过 {progress['minute']} 分钟",
                 cultivation.status(s),
+                *([f"灵力：{s['mechanics']['pool']['current']}/{s['mechanics']['pool']['capacity']} · 已习功法：" +
+                   '、'.join(ref['name'] for ref in s['mechanics']['learned'].values())] if s.get('mechanics') else []),
                 "🎒 储物袋：" + ("、".join(s.get("items", [])) or "暂无物品"),
                 "🤝 人情：" + ("、".join(f"{names.get(k, k)} {v:+d}" for k, v in s.get("relationships", {}).items()) or "尚未结交"),
                 "输入“地图”“丹方”或自由描述行动。💾 已自动保存，/resume 继续修行。",

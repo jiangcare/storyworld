@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from ..rules.runtime import RuntimeSpec
 
 
 class Spec(BaseModel):
@@ -108,6 +109,7 @@ class NarrativeSpec(Spec):
     version: Literal[2] = 2
     sandbox: Optional[Literal["cultivation"]] = None
     stream: Optional[StreamSpec] = None
+    runtime_rules: Optional[RuntimeSpec] = None
     start: str
     opening: str = Field(min_length=1, max_length=2000)
     locations: dict[str, Location] = Field(min_length=1, max_length=100)
@@ -118,6 +120,13 @@ class NarrativeSpec(Spec):
 
     @model_validator(mode="after")
     def references(self):
+        if self.runtime_rules:
+            if self.sandbox != 'cultivation':
+                raise ValueError('当前动态功法仅适用于修仙沙盒')
+            locations = [s.location for s in self.runtime_rules.sources.values()]
+            locations += self.runtime_rules.channel_locations + [t.location for t in self.runtime_rules.trials.values()]
+            if set(locations) - set(self.locations):
+                raise ValueError('功法来源与试法场必须引用已知地点')
         if self.stream and self.anchors:
             raise ValueError('叙事流事件不能混用旧版时间锚点，请将世界事件写入 stream')
         if self.start not in self.locations:

@@ -367,7 +367,8 @@ class GameFlow:
             if player is None:
                 await _ch(ev).send(ev.chat_id, "你不是这个世界的玩家。")
                 return
-            ok, msg = await world_service.record_action(db, world, player, text)
+            request_id = f'{ev.platform}:{ev.chat_id}:{ev.message_id}' if ev.message_id is not None and not ev.payload else None
+            ok, msg = await world_service.record_action(db, world, player, text, request_id=request_id)
             if social_reply(text):
                 await _ch(ev).send(ev.chat_id, msg)
             else:

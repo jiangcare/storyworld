@@ -161,6 +161,36 @@ class NarrativeBeat(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
+class RuleDraft(Base):
+    """规则候选票据：先冻结来源、随机档位，失败重试不重新抽取。"""
+    __tablename__ = 'rule_drafts'
+    __table_args__ = (Index('uq_rule_draft_source', 'world_id', 'source_key', unique=True),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    world_id: Mapped[int] = mapped_column(ForeignKey('worlds.id'), index=True)
+    source_key: Mapped[str] = mapped_column(String(32))
+    source_hash: Mapped[str] = mapped_column(String(64))
+    source_json: Mapped[dict] = mapped_column(JSON)
+    limits_json: Mapped[dict] = mapped_column(JSON)
+    roll: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class RuntimeRule(Base):
+    """已验收的不可变规则快照；服务不提供原地修改和删除接口。"""
+    __tablename__ = 'runtime_rules'
+    __table_args__ = (Index('uq_runtime_rule_version', 'world_id', 'source_key', 'version', unique=True),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    world_id: Mapped[int] = mapped_column(ForeignKey('worlds.id'), index=True)
+    draft_id: Mapped[int] = mapped_column(ForeignKey('rule_drafts.id'), unique=True)
+    source_key: Mapped[str] = mapped_column(String(32))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    kernel_version: Mapped[int] = mapped_column(Integer, default=1)
+    body: Mapped[dict] = mapped_column(JSON)
+    body_hash: Mapped[str] = mapped_column(String(64))
+    activated_revision: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
 class Scene(Base):
     """每个玩家每天的个人场景（私聊推送的内容）。"""
 

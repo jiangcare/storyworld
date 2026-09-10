@@ -6,6 +6,8 @@
 
 # StoryWorld · AI 互动小说世界
 
+新增[动态功法最小闭环](docs/runtime-rules-play.md)：修仙世界可按需研习功法、吐纳蓄灵并在试法石检验五行克制、穿透与反射。规则由 AI 提案、引擎验收和持久保存，首次研习需要可用的 Harness。当前旧宿主机可用 `./run_cli_compatible.sh` 进入已准备的兼容环境。
+
 当前设计收敛为[受规则约束的生成式文字世界](docs/generative-world-design.md)，验证自由意图、实时内容生成与持久后果；这些能力尚未全部实现。现有[十分钟小说 Demo](docs/novel-vertical-slice.md)是预设内容的回归样本：运行 `python run_cli.py --demo`，直接进入「雨幕便利店」。默认使用独立 `novel-demo` 档案；不输入也会继续叙述。新一轮试玩使用 `--profile 雨夜二周目`。约每30秒一段、20段后在危险介入点停住。暂无 API 时使用作者正文，有配置时通过 DeepSeek 润色。
 
 > **最高 UX 约束：首先是一部正在实时发生、玩家身处其中的小说；其次才是游戏。** 开发与验收遵循 [Narrator Contract](docs/narrator-contract.md)。修仙世界已接入独立叙事时钟：阅读时自动发生环境与 NPC 事件，介入点暂停；三种自主性默认 World 95 / Player 30 / Narrative 85。
