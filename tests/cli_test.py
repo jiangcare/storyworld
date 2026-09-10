@@ -40,7 +40,7 @@ class CLITests(unittest.IsolatedAsyncioTestCase):
 
     async def create_cultivation(self):
         await self.channel.welcome(self.flow)
-        index = next(i for i, action in enumerate(self.channel.actions, 1) if '长生录' in action.label)
+        index = next(i for i, action in enumerate(self.channel.actions, 1) if action.label == '长生录 · 凡尘修仙')
         await self.channel.submit(str(index), self.flow)
         self.db.expire_all()
         world = self.db.query(World).order_by(World.id.desc()).first()
@@ -189,7 +189,7 @@ class CLITests(unittest.IsolatedAsyncioTestCase):
             env = dict(os.environ, DATABASE_URL='sqlite:///' + str(Path(directory) / 'game.db'),
                        DEEPSEEK_API_KEY='', TELEGRAM_BOT_TOKEN='', PYTHONIOENCODING='utf-8')
             command = [sys.executable, str(root / 'run_cli.py'), '--profile', '进程档案']
-            titles = [s['title'] for s in reversed(SEED_SCRIPTS) if s['mode'] == 'single']
+            titles = [s.title for s in world_service.list_approved_scripts(self.db, mode='single')]
             choice = titles.index('长生录 · 凡尘修仙') + 1
             first = subprocess.run(command, input=f'{choice}\n修炼\n/quit\n', text=True, encoding='utf-8',
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=directory, timeout=30)

@@ -206,7 +206,8 @@ SEED_SCRIPTS.append(SEED_SLICE)
 def seed_scripts(db) -> None:
     """只添加缺少的内置剧本，不创建管理员；由调用方提交事务。"""
     # 种子剧本（幂等：按标题跳过）
-    for item in SEED_SCRIPTS:
+    from app.worlds.packs import seeds
+    for item in [*SEED_SCRIPTS, *seeds()]:
         exists = db.query(Script).filter(Script.title == item["title"]).first()
         if exists:
             logger.info("跳过已存在剧本: %s", item["title"])

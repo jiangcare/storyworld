@@ -15,6 +15,14 @@ def validate_script(content: dict) -> list[str]:
     errors: list[str] = []
     if not isinstance(content, dict):
         return ["剧本内容必须是 JSON 对象"]
+    if 'world_pack' in content:
+        from ..worlds.packs import for_content, PackError
+        try:
+            pack = for_content(content)
+            if content != pack.content():
+                errors.append('Skills 剧本需使用已安装版本的完整初始定义')
+        except PackError as exc:
+            errors.append(str(exc))
 
     mode = content.get("mode", "multi")
     if mode not in ("single", "multi"):

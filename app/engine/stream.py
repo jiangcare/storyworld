@@ -37,6 +37,9 @@ def _release(store, keys, token):
 
 
 def specification(content):
+    if content.get('world_pack'):
+        from ..worlds.runtime import stream_spec
+        return stream_spec(content)
     if 'narrative' not in content:
         return None
     spec = parse_spec(content)
@@ -86,6 +89,9 @@ def advance(db, world_id, now=None):
         if world is None or world.status != 'running':
             db.rollback()
             return None
+        if world.script.content_json.get('world_pack'):
+            db.rollback()
+            return None  # Generated Skill events use the asynchronous runtime in scan().
         spec = specification(world.script.content_json)
         player = db.scalar(select(WorldPlayer).where(WorldPlayer.world_id == world.id,
                                                        WorldPlayer.user_id == world.owner_id))
@@ -196,7 +202,12 @@ async def scan(channel, now=None):
             continue
         try:
             with SessionLocal() as db:
-                advance(db, world_id, now)
+                world = db.get(World, world_id)
+                if world and world.script.content_json.get('world_pack'):
+                    from ..worlds import runtime
+                    await until_player_input(runtime.advance(db, world_id, now), store, f'stream:waiting:{scope}')
+                else:
+                    advance(db, world_id, now)
                 record = db.scalar(select(NarrativeBeat).where(NarrativeBeat.world_id == world_id,
                       NarrativeBeat.delivered_at.is_(None)).order_by(NarrativeBeat.id).limit(1))
                 if record:
@@ -205,6 +216,29 @@ async def scan(channel, now=None):
             logger.exception('自主叙事投递失败，保留事件等待重试')
         finally:
             _release(store, [lock], token)
+
+
+async def until_player_input(operation, store, waiting_key):
+    """An uncommitted generated passage yields promptly to newly arrived player input."""
+    task = asyncio.create_task(operation)
+    try:
+        while not task.done():
+            if await store.get(waiting_key):
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                return None
+            await asyncio.wait({task}, timeout=.1)
+        return task.result()
+    finally:
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 async def flush_pending(channel, user_id):

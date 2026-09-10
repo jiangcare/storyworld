@@ -2,6 +2,8 @@
 
 StoryWorld 的 Web 和 Telegram 共用 `app/ai/client.py`，默认经官方 [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) Python SDK 调用 `deepseek-v4-flash`。Harness 负责模型调用与运行时生命周期；游戏规则、存档和玩家可见的对话历史由 StoryWorld 管理。
 
+新增的[剧本 Skills 模式](story-skills.md)通过 `app/ai/world_harness.py` 实际加载官方 Skill 工具，再调用世界上下文、规则读取、Python 计算与场景登记工具。下文“无工具 JSON 调用”描述旧版解析/润色和事实核对接口；不再代表所有剧本的运行形式。Skills 版仍关闭通用终端和文件工具。
+
 ## 安装与配置
 
 推荐 Python 3.11；官方 SDK 最低 Python 3.10。Linux 发行版需要 glibc 2.28+，旧 CentOS 7 的 glibc 2.17 无法直接运行官方二进制。可使用满足条件的独立容器、虚拟机或新系统，不要替换宿主机系统 Python/glibc。Windows x64 和 macOS 14+ Apple Silicon 也有官方运行时 wheel；本项目目前验证 Linux x64。
@@ -47,6 +49,8 @@ Web 和 Telegram 使用相同的游戏流程与 AI 后端，但账号按平台�
 ## 旧环境的显式兼容模式
 
 Python 3.9 / 老 Linux 若暂时不能升级，可以安装 `requirements.txt` 并设置 `AI_BACKEND=direct`，使用原有 OpenAI 兼容客户端访问同一个 DeepSeek 模型。该模式不经过 Harness，只是供旧部署选择的兼容路径；默认保持 `harness`。
+
+`direct` 仅适用于旧版剧本，不支持新的剧本 Skills。当前旧宿主机已提供 `./run_cli_compatible.sh --story changsheng` 的隔离兼容入口；新 Skills 计算运行器目前验证 Linux，不承诺未验证的其他系统具有相同资源限制。
 
 ## 离线验证
 

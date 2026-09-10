@@ -6,6 +6,8 @@
 
 # StoryWorld · AI 互动小说世界
 
+首个[剧本 Skills 版「长生录 · 青岚山居」](docs/story-skills.md)已提供：由 Harness 实际加载剧本 Skill，按需调用包内 Python，生成对话、日常事件和自由组合行为。当前主机用 `./run_cli_compatible.sh --story changsheng` 直接开始；正常 Python 3.11 环境用 `python run_cli.py --story changsheng`。默认独立档案，旧存档保留。
+
 新增[动态功法最小闭环](docs/runtime-rules-play.md)：修仙世界可按需研习功法、吐纳蓄灵并在试法石检验五行克制、穿透与反射。规则由 AI 提案、引擎验收和持久保存，首次研习需要可用的 Harness。当前旧宿主机可用 `./run_cli_compatible.sh` 进入已准备的兼容环境。
 
 当前设计收敛为[受规则约束的生成式文字世界](docs/generative-world-design.md)，验证自由意图、实时内容生成与持久后果；这些能力尚未全部实现。现有[十分钟小说 Demo](docs/novel-vertical-slice.md)是预设内容的回归样本：运行 `python run_cli.py --demo`，直接进入「雨幕便利店」。默认使用独立 `novel-demo` 档案；不输入也会继续叙述。新一轮试玩使用 `--profile 雨夜二周目`。约每30秒一段、20段后在危险介入点停住。暂无 API 时使用作者正文，有配置时通过 DeepSeek 润色。

@@ -161,6 +161,18 @@ class NarrativeBeat(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 
 
+class SkillTurnTicket(Base):
+    """A stable random seed for speculative Skill turns at one world revision."""
+    __tablename__ = 'skill_turn_tickets'
+    __table_args__ = (Index('uq_skill_ticket_revision', 'world_id', 'revision', unique=True),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    world_id: Mapped[int] = mapped_column(ForeignKey('worlds.id'), index=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    seed: Mapped[str] = mapped_column(String(64))
+    pack_hash: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
 class RuleDraft(Base):
     """规则候选票据：先冻结来源、随机档位，失败重试不重新抽取。"""
     __tablename__ = 'rule_drafts'

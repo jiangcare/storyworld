@@ -70,11 +70,40 @@ async def open_demo(channel):
     return True
 
 
-async def play(channel, reader=input, *, demo=False):
+async def open_story(channel, pack_id):
+    from sqlalchemy import select
+    from app.db import SessionLocal
+    from app.models import Script
+    from app.engine import world_service
+    from app.worlds.packs import installed
+    pack = installed(pack_id)
+    with SessionLocal() as db:
+        user = world_service.get_or_create_user(db, channel.user_id, platform='cli', display_name=channel.profile)
+        world = world_service.get_active_world(db, user.id)
+        if world is not None and world.script.content_json.get('world_pack') != pack.reference:
+            channel.write('这个档案已有另一段旅程，请用另一个 --profile 开始此剧本。')
+            return False
+        if world is None:
+            script = db.scalar(select(Script).where(Script.title == pack.manifest['title'], Script.status == 'approved'))
+            if script is None:
+                raise ValueError('Skills 剧本尚未初始化')
+            world = world_service.create_world(db, user, script, chat_id=channel.user_id)
+            player = world_service.join_world(db, world, user)
+            world_service.start_world(db, world)
+        else:
+            player = world_service.get_player(db, world, user.id)
+        channel.write(world_service.build_player_recent(db, world, player, 1) or pack.world['opening'])
+    return True
+
+
+async def play(channel, reader=input, *, demo=False, story=None):
     from app.game.flow import GameFlow
     from app.engine import stream
     flow = GameFlow(channel)
-    if demo:
+    if story:
+        if not await open_story(channel, story):
+            return
+    elif demo:
         if not await open_demo(channel):
             return
     else:
@@ -105,10 +134,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='在终端中游玩 StoryWorld 单人剧本')
     parser.add_argument('--check-ai', action='store_true', help='检查本地 AI 配置与 Harness 环境，不发送网络请求')
     parser.add_argument('--demo', action='store_true', help='直接进入雨幕便利店小说 Demo，默认使用独立 novel-demo 档案')
+    parser.add_argument('--story', metavar='PACK', help='直接进入已安装 Skills 剧本，例如 changsheng；默认使用独立档案')
     parser.add_argument('--profile', default=None, help='本地档案名，默认 default；相同名称恢复同一存档')
     args = parser.parse_args(argv)
+    if args.demo and args.story:
+        parser.error('--demo 与 --story 不能同时使用')
     try:
-        name = profile_name(args.profile or ('novel-demo' if args.demo else 'default'))
+        name = profile_name(args.profile or (args.story + '-skills' if args.story else 'novel-demo' if args.demo else 'default'))
     except ValueError as exc:
         parser.error(str(exc))
     for stream in (sys.stdin, sys.stdout, sys.stderr):
@@ -133,9 +165,10 @@ def main(argv=None):
             return 2 if issues else 0
         if issues:
             print('AI 暂不可用：' + ' '.join(detail for _, detail in issues))
-            print(f'仍可阅读作者正文和使用离线动作。诊断日志：{log_path}\n')
+            print(('仍可查看存档和状态，Skills 剧本的交互需要恢复 AI。' if args.story else
+                   '仍可阅读作者正文和使用旧版离线动作。') + f'诊断日志：{log_path}\n')
         prepare_database()
-        asyncio.run(play(CLIChannel(name), demo=args.demo))
+        asyncio.run(play(CLIChannel(name), demo=args.demo, story=args.story))
     except KeyboardInterrupt:
         print('\n已中断。行动可能已经保存，下次启动后请查看存档。')
     except Exception as exc:

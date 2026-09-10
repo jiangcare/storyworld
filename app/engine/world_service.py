@@ -426,6 +426,9 @@ def apply_state_changes(player: WorldPlayer, changes: dict) -> None:
 
 
 def build_player_status_message(player: WorldPlayer, world: World, content: dict) -> str:
+    if content.get('world_pack'):
+        from ..worlds.runtime import status
+        return status(world, player)
     s = player.private_state or {}
     if narrative.enabled(content):
         spec = narrative.parse_spec(content)

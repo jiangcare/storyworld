@@ -45,6 +45,9 @@ def initialize(world, player, content):
     if spec.sandbox:
         cultivation.initialize(player.private_state)
     sync_items(player.private_state, content)
+    if content.get('world_pack'):
+        from ..worlds import runtime
+        runtime.initialize(world, player, content)
 
 
 def sync_items(state, content):
@@ -240,6 +243,9 @@ def request_replay(db, world_id, user_id, request_id, text):
 
 
 async def take_turn(db, world, player, text, *, advance=False, choice_token=None, request_id=None):
+    if world.script.content_json.get('world_pack'):
+        from ..worlds import runtime
+        return await runtime.take_turn(db, world, player, text, request_id=request_id)
     try:
         check_player_input(text)
     except InputRejected as exc:

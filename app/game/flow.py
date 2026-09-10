@@ -116,6 +116,9 @@ class GameFlow:
         await self._do_action(ev, ev.text)
 
     async def _send_play(self, ev, db, world, player, text, *, explain=False):
+        if world.script.content_json.get('world_pack'):
+            await _ch(ev).send(ev.chat_id, text)
+            return
         if not explain or player is None or not narrative.enabled(world.script.content_json):
             await _ch(ev).send(ev.chat_id, text)
             return
@@ -431,7 +434,7 @@ class GameFlow:
                 if narrative.enabled(script.content_json):
                     await self._send_play(
                         ev, db, world, world.players[0],
-                        ("" if script.content_json["narrative"].get("stream") else
+                        ("" if script.content_json["narrative"].get("stream") or script.content_json.get('world_pack') else
                          f"🌍 单人世界【{world.title}】已开始！\n你是{world.players[0].character_name}。\n\n")
                         + (cultivation.OPENING_PROSE if cultivation.enabled(script.content_json) else script.content_json["narrative"]["opening"]),
                     )

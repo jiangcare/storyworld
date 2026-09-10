@@ -1,0 +1,24 @@
+{
+  "format": 1,
+  "id": "changsheng",
+  "version": "1.0.0",
+  "skill": "changsheng-world",
+  "title": "长生录 · 青岚山居",
+  "description": "一处山居、几位邻人。研读旧册、摆弄手边物件、与人商量生意，或安静看雨后的日子流过。没有主线与终局。",
+  "genre": "修仙生活",
+  "rules": {
+    "living": "rules/living.md",
+    "cultivation": "rules/cultivation.md",
+    "exchange": "rules/exchange.md"
+  },
+  "scripts": {
+    "living": "scripts/living.py",
+    "cultivation": "scripts/cultivation.py",
+    "exchange": "scripts/exchange.py"
+  },
+  "limits": {"tool_calls": 24, "calculations": 6, "minutes_per_turn": 120, "memories": 80},
+  "state_limits": {"player_ints": {"rank": [0, 90], "qi_capacity": [1, 100], "revivals": [0, 10000000]}, "resource_capacities": {"qi": "qi_capacity"}},
+  "player_bindings": {"location": {"path": ["location"]}, "hp": {"path": ["resources", "hp"]}, "level": {"path": ["rank"], "offset": 1}},
+  "status_lines": ["所在：{place}", "修行进境：第{level}层 · 修为 {resources[practice]} · 复苏 {player[revivals]}次", "灵力：{resources[qi]}/{player[qi_capacity]} · 气血：{resources[hp]}/20", "随身：{inventory}", "功法：{abilities}"],
+  "clock": {"interval_seconds": 45, "world_autonomy": 95, "player_autonomy": 30, "narrative_autonomy": 85}
+}

@@ -60,6 +60,8 @@ jobs:
         run: python tests/game_boundary_test.py
       - name: Runtime ability registration and fixed conflict resolution
         run: python tests/runtime_rules_test.py
+      - name: Story Skills transactions, Python calculators, memory and autonomy
+        run: python tests/world_skills_test.py
       - name: AI backend adapter test
         run: python tests/harness_test.py
 
@@ -76,3 +78,7 @@ jobs:
         env:
           STORYWORLD_TEST_HARNESS_RUNTIME: "1"
         run: python tests/harness_test.py
+      - name: Verify official Skill loading and world calculator tools
+        env:
+          STORYWORLD_TEST_HARNESS_RUNTIME: "1"
+        run: python tests/world_harness_test.py

@@ -1,0 +1,381 @@
+{
+  "background": "青岚山脚的修士与凡人一起过日子。你在这里租下一间洞府，身具五行杂灵根与本世独有的轮回印。没有救世使命，也没有必须加入的宗门；修行、谋生、交游和清闲都由自己选择。人物和故事为原创。",
+  "opening": "晨雾还挂在青岚山腰。你推开洞府的木门，门闩在掌心留下了一点潮气。檐下的水盆积着昨夜的雨，半截竹片斜靠在盆沿，风一吹，便轻轻碰着陶壁。\n\n庭院那头，阿禾蹲在药圃边，把倒伏的秧苗一株株扶起来。许掌柜从山道上走来，夹着一包没裹严的药材，脚步在你门前慢了下来。\n\n“这雨再下两天，我那一架药都得搬出来晒。”\n\n他抬眼看了看天，也看了看你檐下那块尚且干燥的地方。石室里的蒲团还留着浅浅的凹痕，旁边摊着一本纸页发软的《引露诀》。",
+  "character": {
+    "id": "wanderer",
+    "name": "无名散修",
+    "role": "青岚山居散修",
+    "public_desc": "五行杂灵根，修途由自己选择。",
+    "stats": {
+      "strength": 3,
+      "agility": 3,
+      "intellect": 4,
+      "charm": 3,
+      "luck": 3
+    }
+  },
+  "resources": {
+    "stone": {
+      "name": "灵石",
+      "max": 999999,
+      "value": 1
+    },
+    "herb": {
+      "name": "灵草",
+      "max": 9999,
+      "value": 3
+    },
+    "qi": {
+      "name": "灵力",
+      "max": 100,
+      "value": 0
+    },
+    "practice": {
+      "name": "修为",
+      "max": 1000000,
+      "value": 0
+    },
+    "hp": {
+      "name": "气血",
+      "max": 20,
+      "value": 0
+    }
+  },
+  "initial": {
+    "player": {
+      "location": "cave",
+      "resources": {
+        "stone": 12,
+        "herb": 3,
+        "qi": 0,
+        "practice": 0,
+        "hp": 20
+      },
+      "rank": 0,
+      "qi_capacity": 10,
+      "abilities": {},
+      "revivals": 0
+    },
+    "places": {
+      "cave": {
+        "name": "无名洞府",
+        "description": "石室通向敞亮的檐下，木门、蒲团和旧册都在手边。檐下与庭院的人能相互交谈。",
+        "exits": {
+          "courtyard": 1,
+          "valley": 5
+        },
+        "supplies": [
+          "bamboo",
+          "wood",
+          "cloth",
+          "cord"
+        ]
+      },
+      "courtyard": {
+        "name": "共用庭院",
+        "description": "药圃围着一方小庭院，檐下摆着水盆和日用杂物。山道通向坊市。",
+        "exits": {
+          "cave": 1,
+          "market": 5,
+          "valley": 3
+        },
+        "supplies": [
+          "bamboo",
+          "wood",
+          "cloth",
+          "cord"
+        ]
+      },
+      "market": {
+        "name": "青石坊市",
+        "description": "许掌柜的铺子临着石桥，陆砚常在桥头修补器具。后院有一间小丹房，炉子归掌柜所有。",
+        "exits": {
+          "courtyard": 5,
+          "valley": 5
+        },
+        "supplies": [
+          "wood",
+          "cord"
+        ]
+      },
+      "valley": {
+        "name": "青岚药谷",
+        "description": "溪水沿碎石流下，普通草木丰茂。灵药的采集与归属需要具体依据，不能凭观察无穷发放。",
+        "exits": {
+          "cave": 5,
+          "courtyard": 3,
+          "market": 5
+        },
+        "supplies": [
+          "bamboo",
+          "wood"
+        ]
+      }
+    },
+    "objects": {
+      "door": {
+        "name": "洞府木门",
+        "location": "cave",
+        "owner": "player",
+        "material": "wood",
+        "tags": [
+          "light",
+          "lever_target"
+        ],
+        "properties": {
+          "open": true,
+          "tied": false,
+          "wet": false
+        },
+        "mutable": {
+          "open": {
+            "values": [
+              true,
+              false
+            ],
+            "needs": []
+          },
+          "tied": {
+            "values": [
+              true,
+              false
+            ],
+            "needs": [
+              "flexible"
+            ]
+          },
+          "wet": {
+            "values": [
+              true,
+              false
+            ],
+            "needs": [
+              "water",
+              "absorbent"
+            ]
+          }
+        }
+      },
+      "basin": {
+        "name": "檐下水盆",
+        "location": "cave",
+        "owner": "player",
+        "material": "clay",
+        "tags": [
+          "water",
+          "container"
+        ],
+        "properties": {
+          "covered": false,
+          "tied": false
+        },
+        "mutable": {
+          "covered": {
+            "values": [
+              true,
+              false
+            ],
+            "needs": [
+              "cover"
+            ]
+          },
+          "tied": {
+            "values": [
+              true,
+              false
+            ],
+            "needs": [
+              "flexible"
+            ]
+          }
+        }
+      },
+      "cloth": {
+        "name": "旧棉布",
+        "location": "cave",
+        "owner": "player",
+        "material": "cloth",
+        "tags": [
+          "absorbent",
+          "cover",
+          "flexible"
+        ],
+        "properties": {
+          "wet": false,
+          "tied": false
+        },
+        "mutable": {
+          "wet": {
+            "values": [
+              true,
+              false
+            ],
+            "needs": [
+              "water"
+            ]
+          },
+          "tied": {
+            "values": [
+              true,
+              false
+            ],
+            "needs": [
+              "flexible",
+              "lever"
+            ]
+          }
+        }
+      },
+      "bamboo": {
+        "name": "半截竹片",
+        "location": "cave",
+        "owner": "player",
+        "material": "bamboo",
+        "tags": [
+          "lever",
+          "light"
+        ],
+        "properties": {
+          "wet": false,
+          "tied": false
+        },
+        "mutable": {
+          "wet": {
+            "values": [
+              true,
+              false
+            ],
+            "needs": [
+              "water",
+              "absorbent"
+            ]
+          },
+          "tied": {
+            "values": [
+              true,
+              false
+            ],
+            "needs": [
+              "flexible"
+            ]
+          }
+        }
+      },
+      "cord": {
+        "name": "细麻绳",
+        "location": "cave",
+        "owner": "player",
+        "material": "cord",
+        "tags": [
+          "flexible",
+          "light"
+        ],
+        "properties": {
+          "wet": false,
+          "tied": false
+        },
+        "mutable": {
+          "wet": {
+            "values": [
+              true,
+              false
+            ],
+            "needs": [
+              "water"
+            ]
+          },
+          "tied": {
+            "values": [
+              true,
+              false
+            ],
+            "needs": [
+              "lever",
+              "light"
+            ]
+          }
+        }
+      },
+      "stove": {
+        "name": "掌柜的丹炉",
+        "location": "market",
+        "owner": "xu",
+        "material": "bronze",
+        "tags": [
+          "heavy",
+          "furnace"
+        ],
+        "properties": {
+          "lit": false
+        },
+        "mutable": {}
+      },
+      "trial_fire": {
+        "name": "火纹试法石",
+        "location": "cave",
+        "owner": "player",
+        "material": "stone",
+        "tags": [
+          "trial"
+        ],
+        "properties": {},
+        "mutable": {},
+        "ability": {
+          "name": "石上火纹",
+          "element": "fire",
+          "form": "strike",
+          "cost": 3,
+          "power": 6,
+          "reflection": 0
+        }
+      }
+    },
+    "npcs": {
+      "xu": {
+        "name": "许掌柜",
+        "role": "坊市药铺掌柜",
+        "location": "courtyard",
+        "personality": "精打细算但讲信用，说话直接，愿意商量有来有往的交换。",
+        "motive": "让一批药材平安度过雨季，保持铺子周转。",
+        "activity": "从药铺来到庭院，留意檐下干燥的地方。",
+        "resources": {
+          "stone": 80,
+          "herb": 12
+        }
+      },
+      "ahe": {
+        "name": "阿禾",
+        "role": "照看药圃的邻居",
+        "location": "courtyard",
+        "personality": "细心、务实，熟悉草木，不随便把别人的物件拿走。",
+        "motive": "扶好被雨打倒的秧苗，想找一个不会压伤叶片的支架。",
+        "activity": "蹲在药圃边扶苗。",
+        "resources": {
+          "stone": 6,
+          "herb": 2
+        }
+      },
+      "luyan": {
+        "name": "陆砚",
+        "role": "修补器具的散修",
+        "location": "market",
+        "personality": "话少，喜欢琢磨日用物件的用法，尊重别人自己动手。",
+        "motive": "修好手边的旧伞，在下午雨来前收摊。",
+        "activity": "在桥头整理工具。",
+        "resources": {
+          "stone": 10,
+          "herb": 1
+        }
+      }
+    },
+    "offers": {},
+    "memories": [],
+    "weather": "雨后初晴"
+  },
+  "perception_groups": [
+    [
+      "cave",
+      "courtyard"
+    ]
+  ]
+}
