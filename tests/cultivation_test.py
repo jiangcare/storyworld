@@ -318,7 +318,7 @@ class CultivationTests(unittest.IsolatedAsyncioTestCase):
         def receive(ws):
             for _ in range(5):
                 message = ws.receive_json()
-                if message['type'] == 'msg':
+                if message['type'] == 'msg' and message['role'] == 'bot':
                     return message
             self.fail('没有收到游戏回复')
         with TestClient(app) as client:

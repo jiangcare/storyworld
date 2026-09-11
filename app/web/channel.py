@@ -101,7 +101,13 @@ class WebChannel(Channel):
             db.close()
 
     async def persist_user_message(self, conv_key: str, nickname: str, text: str) -> int:
-        return self._persist(conv_key, "user", text, sender=nickname)
+        """保存后立即回显给会话内所有连接，不等待游戏或 AI 回复。"""
+        mid = self._persist(conv_key, "user", text, sender=nickname)
+        await self._deliver(conv_key, {
+            "type": "msg", "id": mid, "role": "user", "sender": nickname,
+            "text": text, "actions": None,
+        })
+        return mid
 
     async def persist_sys(self, conv_key: str, text: str) -> int:
         return self._persist(conv_key, "sys", text)

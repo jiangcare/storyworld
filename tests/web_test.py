@@ -36,6 +36,14 @@ def recv_until_type(ws, want, max_n=10):
     raise AssertionError(f"未收到期望消息 {want}")
 
 
+def recv_user(ws, nickname, text):
+    got = ws.receive_json()
+    assert got["type"] == "msg" and got["role"] == "user", got
+    assert got["sender"] == nickname and got["text"] == text, got
+    assert got["id"] > 0 and got["actions"] is None, got
+    return got
+
+
 def main():
     from app.db import SessionLocal, init_db
     from app.models import Script
@@ -59,6 +67,7 @@ def main():
         with client.websocket_connect(f"/ws/web?conv={conv}", headers=hdr) as ws:
             assert ws.receive_json()["type"] == "hello"
             ws.send_json({"type": "text", "text": "/start"})
+            recv_user(ws, "阿伟", "/start")
             got = ws.receive_json()
             assert got["type"] == "msg" and "StoryWorld" in got["text"] and got["actions"], got
 
@@ -74,6 +83,7 @@ def main():
 
             # 自由文本 = 行动
             ws.send_json({"type": "text", "text": "漂流瓶的信写的是什么"})
+            sent = recv_user(ws, "阿伟", "漂流瓶的信写的是什么")
             got = recv_until_type(ws, "msg")
             assert "你父亲不是死于意外" in got["text"], got
 
@@ -82,6 +92,9 @@ def main():
         assert r.status_code == 200
         texts = "\n".join(m["text"] for m in r.json())
         assert "你父亲不是死于意外" in texts and "StoryWorld" in texts, "历史应包含对话"
+        own = [m for m in r.json() if m["role"] == "user"]
+        assert [m["text"] for m in own] == ["/start", "漂流瓶的信写的是什么"], own
+        assert own[-1]["id"] == sent["id"] and own[-1]["sender"] == "阿伟", own
 
         # ---- 房间：A 创建 → B 加入 → 多人世界 → 广播 ----
         rr = client.post("/api/web/room", json={"name": "副本测试房"}, headers=hdr)
@@ -111,21 +124,31 @@ def main():
 
             # B 加入世界
             wsB.send_json({"type": "text", "text": "/join"})
+            echo_b = recv_user(wsB, "小李", "/join")
+            assert recv_user(wsA, "小李", "/join") == echo_b
             gotB = recv_until_type(wsB, "msg")
             assert "已加入" in gotB["text"], gotB
             recv_until_type(wsA, "msg")  # A 也收到加入广播
 
             # A（房主）开始世界
             wsA.send_json({"type": "text", "text": "/start_world"})
+            echo_a = recv_user(wsA, "阿伟", "/start_world")
+            assert recv_user(wsB, "阿伟", "/start_world") == echo_a
             gotA = recv_until_type(wsA, "msg")
             assert "世界开始" in gotA["text"], gotA
             recv_until_type(wsB, "msg")
 
             # B 行动（房间自由文本 = 行动）
             wsB.send_json({"type": "text", "text": "我去望风"})
+            echo_b = recv_user(wsB, "小李", "我去望风")
+            assert recv_user(wsA, "小李", "我去望风") == echo_b
             gotB = recv_until_type(wsB, "msg")
             assert "已记录" in gotB["text"], gotB
             recv_until_type(wsA, "msg")
+
+        room_history = client.get(f"/api/web/conv/{rconv}/messages", headers=hdr_b).json()
+        sent_actions = [m for m in room_history if m["role"] == "user" and m["text"] == "我去望风"]
+        assert len(sent_actions) == 1 and sent_actions[0]["id"] == echo_b["id"], sent_actions
 
         # 房间信息
         info = client.get(f"/api/web/room/{rid}/info", headers=hdr).json()
