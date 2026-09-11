@@ -90,6 +90,7 @@ async def run():
     with dbmod.SessionLocal() as db:
         world, player = db.get(World, world_id), db.get(WorldPlayer, player_id)
         before = copy.deepcopy(player.private_state)
+        stream.control(db, world, 'read')
         now = world.progress_json['stream']['next_at'] + 1
         text = await runtime.advance(db, world_id, now=now)
         if text is None:

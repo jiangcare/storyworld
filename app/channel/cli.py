@@ -16,7 +16,8 @@ CLI_HELP = """🎮 StoryWorld 命令行
 /guide 游戏玩法         /log 查看经历      /continue 继续观察
 /settle 结算旧版单人剧本的一天（即时剧本不需要）
 /help 命令说明          /quit 退出（每次行动已经自动保存）
-/pause 暂停叙事         /stream on 恢复叙事    /autonomy 自主性设置
+/read 继续阅读一段      /stream on 连续阅读    /pause 暂停连续阅读
+/autonomy 自主性设置
 旧版基础动作可离线使用；Skills 剧本的交互与自主叙事需要配置 AI。"""
 
 

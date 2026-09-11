@@ -1,6 +1,6 @@
 这不是一个等待玩家提问并回答的 AI 聊天游戏。它是一部由游戏世界持续驱动、由 AI 实时写作、玩家可以随时介入并改变走向的可游玩小说。
 
-1. 故事默认自己前进，而不是默认等待玩家。
+1. 世界自主发展，阅读节奏由玩家掌握：默认读完一段再继续，连续阅读由玩家开启。
 2. 玩家默认自由输入，而不是默认做选择题。
 3. 游戏机制默认隐藏在小说下面，而不是用系统语言打断小说。
 
@@ -10,9 +10,9 @@
 
 新增[动态功法最小闭环](docs/runtime-rules-play.md)：修仙世界可按需研习功法、吐纳蓄灵并在试法石检验五行克制、穿透与反射。规则由 AI 提案、引擎验收和持久保存，首次研习需要可用的 Harness。当前旧宿主机可用 `./run_cli_compatible.sh` 进入已准备的兼容环境。
 
-当前设计收敛为[受规则约束的生成式文字世界](docs/generative-world-design.md)，验证自由意图、实时内容生成与持久后果；这些能力尚未全部实现。现有[十分钟小说 Demo](docs/novel-vertical-slice.md)是预设内容的回归样本：运行 `python run_cli.py --demo`，直接进入「雨幕便利店」。默认使用独立 `novel-demo` 档案；不输入也会继续叙述。新一轮试玩使用 `--profile 雨夜二周目`。约每30秒一段、20段后在危险介入点停住。暂无 API 时使用作者正文，有配置时通过 DeepSeek 润色。
+当前设计收敛为[受规则约束的生成式文字世界](docs/generative-world-design.md)，验证自由意图、实时内容生成与持久后果；这些能力尚未全部实现。现有[十分钟小说 Demo](docs/novel-vertical-slice.md)是预设内容的回归样本：运行 `python run_cli.py --demo`，直接进入「雨幕便利店」。默认使用独立 `novel-demo` 档案；用 `/read` 继续阅读，或 `/stream on` 开启连续叙述。新一轮试玩使用 `--profile 雨夜二周目`。约每30秒一段、20段后在危险介入点停住。暂无 API 时使用作者正文，有配置时通过 DeepSeek 润色。
 
-> **最高 UX 约束：首先是一部正在实时发生、玩家身处其中的小说；其次才是游戏。** 开发与验收遵循 [Narrator Contract](docs/narrator-contract.md)。修仙世界已接入独立叙事时钟：阅读时自动发生环境与 NPC 事件，介入点暂停；三种自主性默认 World 95 / Player 30 / Narrative 85。
+> **最高 UX 约束：首先是一部正在实时发生、玩家身处其中的小说；其次才是游戏。** 开发与验收遵循 [Narrator Contract](docs/narrator-contract.md)。修仙世界已接入独立叙事时钟与[阅读节奏](docs/reading-pace.md)：默认逐段阅读，可选连续阅读，介入点暂停；三种自主性默认 World 95 / Player 30 / Narrative 85。
 
 终端直接游玩：在项目环境运行 `python run_cli.py`，自动添加内置剧本，输入编号创建世界后自由描述行动。默认回复以小说正文为主，输入 `/guide` 才展开编号选项。使用 `python run_cli.py --profile 青岚散修` 保存独立档案，下次启动自动恢复。详见 [命令行模式](docs/cli.md)。
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any, Optional, Sequence
 
 from ..channel.base import Channel
@@ -29,9 +30,43 @@ class WebChannel(Channel):
     def __init__(self) -> None:
         self._conns: dict[str, set] = {}
         self._lock = asyncio.Lock()
+        self._readers = {}
 
     def stream_present(self, user_id):
         return bool(self._conns.get(self.conv_for_user(user_id)))
+
+    def reader_update(self, ws, data):
+        revision = data.get('revision')
+        self._readers[ws] = {
+            'revision': revision if type(revision) is int else -1,
+            'ready': data.get('ready') is True, 'expires': time.monotonic() + 15,
+        }
+
+    def reading_ready(self, user_id, revision):
+        return any(r.get('ready') and r.get('revision') == revision and r.get('expires', 0) > time.monotonic()
+                   for ws in self._conns.get(self.conv_for_user(user_id), ())
+                   for r in [self._readers.get(ws, {})])
+
+    def reading_state(self, conv):
+        from sqlalchemy import select
+        from ..engine.stream import reading_mode, specification, initial
+        from ..models import World, User
+        kind, uid = self.conv_parts(conv)
+        if kind != 'u':
+            return None
+        with SessionLocal() as db:
+            world = db.scalar(select(World).join(User, User.id == World.owner_id).where(
+                User.platform == 'web', User.tg_id == uid, World.status == 'running').order_by(World.id.desc()).limit(1))
+            state = world.progress_json.get('stream') if world else None
+            if state is None and world:
+                spec = specification(world.script.content_json)
+                if spec:
+                    state = initial(spec, time.time())
+            if state is None:
+                return None
+            return {'world': world.id, 'revision': world.progress_json['narrative']['revision'],
+                    'mode': reading_mode(state), 'requested': state.get('read_requested', False),
+                    'intervention': bool(state['intervention']), 'completed': state.get('completed', False)}
 
     # ---------------- 会话解析 ----------------
 
@@ -57,6 +92,7 @@ class WebChannel(Channel):
 
     async def unregister(self, conv_key: str, ws: Any) -> None:
         async with self._lock:
+            self._readers.pop(ws, None)
             s = self._conns.get(conv_key)
             if s:
                 s.discard(ws)
@@ -64,8 +100,12 @@ class WebChannel(Channel):
                     self._conns.pop(conv_key, None)
 
     async def _deliver(self, conv_key: str, data: dict) -> None:
+        if data.get('role') == 'bot':
+            data = {**data, 'reading': self.reading_state(conv_key)}
         for ws in list(self._conns.get(conv_key, ())):
             try:
+                if data.get('role') == 'bot':
+                    self._readers.pop(ws, None)
                 await ws.send_json(data)
             except Exception:  # noqa: BLE001 连接已断开
                 await self.unregister(conv_key, ws)

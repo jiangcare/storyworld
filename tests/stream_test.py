@@ -58,6 +58,7 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         self.world = world_service.create_world(self.db, user, script, chat_id=5566)
         self.player = world_service.join_world(self.db, self.world, user)
         world_service.start_world(self.db, self.world)
+        stream.control(self.db, self.world, 'stream', 'on')
         self.channel = WatchingChannel()
         self.now = time.time()
 
@@ -171,6 +172,10 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
         ]}}
         self.assertEqual(validate_script(content), [])
         self.world.script.content_json = content
+        progress = copy.deepcopy(self.world.progress_json)
+        progress['stream'] = stream.initial(stream.specification(content), self.now)
+        progress['stream']['reading_mode'] = 'continuous'
+        self.world.progress_json = progress
         self.db.commit()
         before = copy.deepcopy(self.player.private_state)
         await self.scan(0)
@@ -233,6 +238,7 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
             done.wait(10)
             return '/quit'
         with patch('app.engine.stream.interval', return_value=0):
+            stream.control(self.db, self.world, 'stream', 'on')
             await play(terminal, reader)
         self.assertTrue(done.is_set(), terminal.output.getvalue())
         self.assertEqual(self.db.query(PlayerAction).count(), 0)
@@ -286,12 +292,63 @@ class StreamTests(unittest.IsolatedAsyncioTestCase):
                 ws.receive_json()
                 ws.send_json({'type': 'action', 'payload': f'mk:{self.world.script_id}'})
                 receive(ws)
-                paragraphs = [receive(ws) for _ in range(3)]
+                ws.send_json({'type': 'text', 'text': '/stream on'})
+                while True:
+                    packet = receive(ws)
+                    if packet.get('role') == 'bot':
+                        break
+                paragraphs = []
+                for _ in range(3):
+                    ws.send_json({'type': 'reader', 'ready': True, 'revision': packet['reading']['revision']})
+                    packet = receive(ws)
+                    paragraphs.append(packet)
                 self.assertIn('叩门声', paragraphs[-1]['text'])
                 self.assertTrue(all(not p['actions'] for p in paragraphs))
                 ws.send_json({'type': 'ping'})
                 self.assertEqual(ws.receive_json()['type'], 'pong')
         self.assertEqual(self.db.query(PlayerAction).count(), 0)
+
+    def test_web_read_button_advances_once_and_cannot_answer_for_player(self):
+        from fastapi.testclient import TestClient
+        from app.web.main import app
+        def packet(ws, kind, role=None):
+            while True:
+                got = ws.receive_json()
+                if got['type'] == kind and (role is None or got.get('role') == role):
+                    return got
+        with patch('app.engine.stream.interval', return_value=0), TestClient(app) as client:
+            user = client.post('/api/web/register', json={'nickname': '慢慢读'}).json()
+            headers = {'cookie': f"sw_web={client.cookies.get('sw_web')}"}
+            with client.websocket_connect(f"/ws/web?conv=u:{user['id']}", headers=headers) as ws:
+                packet(ws, 'hello')
+                ws.send_json({'type':'action', 'payload':f'mk:{self.world.script_id}'})
+                first = packet(ws, 'msg', 'bot')
+                state = first['reading']
+                self.assertEqual(state['mode'], 'reading')
+                self.assertEqual(state['revision'], 0)
+                # A fresh visible page alone never grants permission for another paragraph.
+                ws.send_json({'type':'reader', 'ready':True, 'revision':0})
+                time.sleep(1.2)
+                ws.send_json({'type':'ping'})
+                self.assertEqual(ws.receive_json()['type'], 'pong')
+                for expected_revision in (1, 2, 3):
+                    ws.send_json({'type':'reader', 'ready':True, 'revision':state['revision']})
+                    request = {'type':'reading', 'mode':'next', 'world':state['world'], 'revision':state['revision']}
+                    ws.send_json(request)
+                    packet(ws, 'reading')
+                    state = packet(ws, 'msg', 'bot')['reading']
+                    self.assertEqual(state['revision'], expected_revision)
+                    self.assertFalse(state['requested'])
+                self.assertTrue(state['intervention'])
+                ws.send_json({'type':'reading', 'mode':'next', 'world':state['world'], 'revision':state['revision']})
+                self.assertIn('不会替你作答', packet(ws, 'msg', 'bot')['text'])
+                state = packet(ws, 'reading')['reading']
+                self.assertEqual(state['revision'], 3)
+                self.assertTrue(state['intervention'])
+            with client.websocket_connect(f"/ws/web?conv=u:{user['id']}", headers=headers) as ws:
+                self.assertTrue(packet(ws, 'hello')['reading']['intervention'])
+        self.assertEqual(self.db.query(PlayerAction).count(), 0)
+        self.assertEqual(self.db.query(NarrativeBeat).count(), 3)
 
 
 if __name__ == '__main__':

@@ -96,7 +96,9 @@ class GameFlow:
             channel.note_activity(ev.user_id)
         async with stream.input_turn(ev.platform, ev.user_id):
             if isinstance(channel, Channel):
-                await stream.flush_pending(channel, ev.user_id)
+                delivered_pending = await stream.flush_pending(channel, ev.user_id)
+                if delivered_pending and parse_command(ev.text)[0] == 'read':
+                    return  # This click reads the already committed paragraph, not another one.
             await self._dispatch(ev)
 
     async def _dispatch(self, ev: ChannelEvent) -> None:
@@ -181,14 +183,16 @@ class GameFlow:
                 await self._do_action(ev, arg)
             elif cmd == "status":
                 await self._cmd_status(ev, db)
-            elif cmd in ('pause', 'stream', 'autonomy', 'pass'):
+            elif cmd in ('pause', 'stream', 'autonomy', 'pass', 'read'):
                 from ..engine import stream
                 user = world_service.get_or_create_user(db, ev.user_id, platform=ev.platform)
                 world = world_service.get_active_world(db, user.id, None if ev.is_private else ev.chat_id)
                 if world is None or world.owner_id != user.id:
                     await _ch(ev).send(ev.chat_id, '当前没有属于你的进行中世界。')
                 else:
-                    await _ch(ev).send(ev.chat_id, stream.control(db, world, cmd, arg))
+                    response = stream.control(db, world, cmd, arg)
+                    if response:
+                        await _ch(ev).send(ev.chat_id, response)
             elif cmd == "log":
                 await self._cmd_log(ev, db)
             elif cmd in ("continue", "resume"):

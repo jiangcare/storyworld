@@ -26,6 +26,9 @@ class Channel:
         # 无在线状态的聊天渠道只在最近一次玩家交互后的15分钟主动叙述。
         return time.time() - getattr(self, '_stream_activity', {}).get(user_id, 0) < 900
 
+    def reading_ready(self, user_id, revision):
+        return self.stream_present(user_id)
+
     # ---------- 发送 ----------
 
     async def send_text(self, chat_id: int, text: str) -> Optional[int]:

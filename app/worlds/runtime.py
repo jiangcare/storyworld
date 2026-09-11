@@ -127,6 +127,7 @@ def commit(db, world_id, player_id, session, baseline, output, *, request_id=Non
         narrative['revision'] += 1
         narrative['minute'] += output['minutes']
         clock = progress['stream']
+        clock['read_requested'] = False
         if session.mode == 'player' and (output['responded'] or any(r.get('minutes', 0) for r in output['results'])):
             clock['intervention'] = None
         if output['intervention']:
@@ -201,13 +202,14 @@ async def generate(session):
     raise PackError('这一段的叙述与实际后果还未能核对，世界没有改变；稍后再接着写。')
 
 
-async def advance(db, world_id, now=None):
+async def advance(db, world_id, now=None, *, can_read=lambda: True):
+    from ..engine.stream import reading_allowed
     now = time.time() if now is None else now
     world = db.get(World, world_id, populate_existing=True)
     if not world or not world.script.content_json.get('world_pack') or world.status != 'running':
         return None
     clock = world.progress_json.get('stream', {})
-    if (not clock or clock['manual_pause'] or clock['intervention'] or not clock['world_autonomy']
+    if (not clock or not reading_allowed(clock) or not can_read() or clock['manual_pause'] or clock['intervention'] or not clock['world_autonomy']
             or not clock['narrative_autonomy'] or clock['next_at'] > now):
         return None
     if db.scalar(select(NarrativeBeat.id).where(NarrativeBeat.world_id == world_id, NarrativeBeat.delivered_at.is_(None)).limit(1)):
@@ -218,6 +220,8 @@ async def advance(db, world_id, now=None):
     try:
         session, baseline = prepare(db, world_id, player.id, '', 'world')
         session, output = await generate(session)
+        if not can_read():
+            return None
         commit(db, world_id, player.id, session, baseline, output, now=now)
         return output['prose']
     except (HarnessError, PackError, LLMError):

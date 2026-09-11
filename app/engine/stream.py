@@ -61,10 +61,20 @@ def interval(state):
     return state.get('interval_seconds') or max(8, 60 - state['narrative_autonomy'] // 2)
 
 
+def reading_mode(state):
+    # Existing saves also default to reading; this never changes the story pack hash.
+    return state.get('reading_mode', 'reading')
+
+
+def reading_allowed(state):
+    return reading_mode(state) == 'continuous' or state.get('read_requested', False)
+
+
 def initial(spec, now):
     state = {'world_autonomy': spec.world_autonomy, 'player_autonomy': spec.player_autonomy,
              'narrative_autonomy': spec.narrative_autonomy, 'manual_pause': False,
-             'intervention': None, 'completed': False, 'interval_seconds': spec.interval_seconds, 'cursors': {}, 'world': {'npcs': {}, 'weather': ''}}
+             'intervention': None, 'completed': False, 'reading_mode': 'reading', 'read_requested': False,
+             'interval_seconds': spec.interval_seconds, 'cursors': {}, 'world': {'npcs': {}, 'weather': ''}}
     state['next_at'] = now + interval(state)
     return state
 
@@ -74,6 +84,7 @@ def after_action(progress, receipt, now=None):
     if 'stream' not in progress:
         return
     state = progress['stream']
+    state['read_requested'] = False
     if any(r.get('minutes', 0) > 0 and r.get('kind') in ('move', 'interact', 'rest') for r in receipt['results']):
         state['intervention'] = None
         state['next_at'] = (time.time() if now is None else now) + interval(state)
@@ -104,7 +115,7 @@ def advance(db, world_id, now=None):
             world.progress_json = progress
             db.commit()
             return None
-        if (state.get('completed') or state['manual_pause'] or state['intervention'] or not state['world_autonomy'] or
+        if (not reading_allowed(state) or state.get('completed') or state['manual_pause'] or state['intervention'] or not state['world_autonomy'] or
                 not state['narrative_autonomy'] or progress['narrative']['paused'] or
                 progress['narrative']['ending'] or state['next_at'] > now):
             db.rollback()
@@ -140,6 +151,7 @@ def advance(db, world_id, now=None):
         timeline['minute'] += beat.minutes
         timeline['revision'] += 1
         state['next_at'] = now + interval(state)
+        state['read_requested'] = False
         if beat.intervention:
             state['intervention'] = {'location': location, 'cursor': index, 'revision': timeline['revision']}
         text = event.text
@@ -203,27 +215,37 @@ async def scan(channel, now=None):
         try:
             with SessionLocal() as db:
                 world = db.get(World, world_id)
+                if world is None:
+                    continue
+                revision = world.progress_json.get('narrative', {}).get('revision', 0)
+                pending = db.scalar(select(NarrativeBeat).where(NarrativeBeat.world_id == world_id,
+                    NarrativeBeat.delivered_at.is_(None)).order_by(NarrativeBeat.id).limit(1))
+                can_read = lambda: (channel.reading_ready(user_id, revision) or
+                    bool(pending and channel.reading_ready(user_id, pending.revision - 1)))
+                if not can_read():
+                    continue
                 if world and world.script.content_json.get('world_pack'):
                     from ..worlds import runtime
-                    await until_player_input(runtime.advance(db, world_id, now), store, f'stream:waiting:{scope}')
+                    await until_player_input(runtime.advance(db, world_id, now, can_read=can_read), store,
+                                             f'stream:waiting:{scope}', can_read=can_read)
                 else:
                     advance(db, world_id, now)
                 record = db.scalar(select(NarrativeBeat).where(NarrativeBeat.world_id == world_id,
                       NarrativeBeat.delivered_at.is_(None)).order_by(NarrativeBeat.id).limit(1))
-                if record:
-                    await deliver_record(channel, db, record, user_id)
+                if record and can_read():
+                    await deliver_record(channel, db, record, user_id, can_read=can_read)
         except Exception:
             logger.exception('自主叙事投递失败，保留事件等待重试')
         finally:
             _release(store, [lock], token)
 
 
-async def until_player_input(operation, store, waiting_key):
+async def until_player_input(operation, store, waiting_key, *, can_read=lambda: True):
     """An uncommitted generated passage yields promptly to newly arrived player input."""
     task = asyncio.create_task(operation)
     try:
         while not task.done():
-            if await store.get(waiting_key):
+            if not can_read() or await store.get(waiting_key):
                 task.cancel()
                 try:
                     await task
@@ -254,9 +276,10 @@ async def flush_pending(channel, user_id):
         if record is None:
             return
         await deliver_record(channel, db, record, user_id, polish=False)
+        return True
 
 
-async def deliver_record(channel, db, record, user_id, *, polish=True):
+async def deliver_record(channel, db, record, user_id, *, polish=True, can_read=lambda: True):
     record_id, text = record.id, record.text
     if polish and settings.deepseek_api_key and not record.receipt.get('narrated'):
         from ..ai import narrative as narrator
@@ -281,6 +304,8 @@ async def deliver_record(channel, db, record, user_id, *, polish=True):
         record.receipt = {**record.receipt, 'narrated': True}
         db.commit()
     db.rollback()
+    if not can_read():
+        return
     delivered = await channel.send_private(user_id, text)
     if delivered is not None:
         begin_write(db)
@@ -312,9 +337,29 @@ def control(db, world, command, arg=''):
         state = progress.setdefault('stream', initial(spec, now))
         if command == 'pause':
             state['manual_pause'] = True
+            state['reading_mode'] = 'reading'
+            state['read_requested'] = False
         elif command == 'stream' and arg in ('on', 'off'):
             state['manual_pause'] = arg == 'off'
+            state['reading_mode'] = 'continuous' if arg == 'on' else 'reading'
+            state['read_requested'] = False
             state['next_at'] = now + interval(state)
+        elif command == 'read':
+            if arg and arg != str(progress['narrative']['revision']):
+                db.rollback()
+                return '已有新的段落，请先读完再继续。'
+            if state['intervention']:
+                db.rollback()
+                return '故事停在需要你决定的地方。继续阅读不会替你作答；可以直接说出行动。'
+            if state.get('completed'):
+                db.rollback()
+                return '这一段已经讲完，仍可直接描述行动。'
+            if not state['world_autonomy'] or not state['narrative_autonomy']:
+                db.rollback()
+                return '自主叙事已在自主性设置中关闭，仍可直接描述行动。'
+            state['manual_pause'] = False
+            state['read_requested'] = True
+            state['next_at'] = now
         elif command == 'pass':
             state['intervention'] = None
             state['next_at'] = now + interval(state)
@@ -338,8 +383,10 @@ def control(db, world, command, arg=''):
     except BaseException:
         db.rollback()
         raise
-    status = '暂停' if state['manual_pause'] or not state['world_autonomy'] or not state['narrative_autonomy'] else ('等待玩家介入' if state['intervention'] else '运行中')
+    if command == 'read':
+        return ''
+    status = '暂停' if state['manual_pause'] or not state['world_autonomy'] or not state['narrative_autonomy'] else ('等待玩家介入' if state['intervention'] else '连续阅读' if reading_mode(state) == 'continuous' else '等待继续阅读')
     if state.get('completed'):
         status = '本段已讲完（仍可自由行动）'
     return (f'叙事流：{status}\nWorld {state["world_autonomy"]} / Player {state["player_autonomy"]} / Narrative {state["narrative_autonomy"]}'
-            f'\n段落间隔约 {interval(state)} 秒。/pause 暂停，/stream on 恢复；/pass 表示暂不介入当前事件。')
+            f'\n/read 继续一段；/stream on 连续阅读，/pause 暂停；/pass 表示暂不介入当前事件。')

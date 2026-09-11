@@ -40,6 +40,7 @@ class NovelSliceTests(unittest.IsolatedAsyncioTestCase):
         self.world = world_service.create_world(self.db, self.user, self.script, chat_id=5566)
         self.player = world_service.join_world(self.db, self.world, self.user)
         world_service.start_world(self.db, self.world)
+        stream.control(self.db, self.world, 'stream', 'on')
         self.channel = WatchingChannel()
         self.now = time.time()
 

@@ -318,13 +318,26 @@ async def ws_endpoint(ws: WebSocket):
                 "type": "hello",
                 "conv": conv,
                 "me": {"id": user.tg_id, "nickname": user.display_name},
+                "reading": web_channel.reading_state(conv),
             }
         )
         while True:
             data = await ws.receive_json()
             kind = data.get("type")
             if kind == "text":
+                web_channel.reader_update(ws, {})
                 await _handle_text(ws, user, conv, str(data.get("text", ""))[:2000])
+            elif kind == 'reader':
+                web_channel.reader_update(ws, data)
+            elif kind == 'reading' and conv.startswith('u:'):
+                current = web_channel.reading_state(conv)
+                command = {'next': '/read', 'continuous': '/stream on', 'reading': '/pause'}.get(data.get('mode'))
+                if command and current and data.get('world') == current['world']:
+                    if data.get('mode') == 'next':
+                        command += ' ' + str(data.get('revision', -1))
+                    ev = _build_event(user, conv, text=command, ws=ws)
+                    await web_channel.handle_event(ev)
+                await ws.send_json({'type': 'reading', 'reading': web_channel.reading_state(conv)})
             elif kind == "action":
                 payload = str(data.get("payload", ""))[:64]
                 if payload:

@@ -28,6 +28,8 @@ jobs:
         run: python tests/flow_test.py
       - name: Web channel test
         run: python tests/web_test.py
+      - name: Web reading pace and attention gate
+        run: node tests/web_reading_test.js
       - name: Command line channel and save resume
         run: python tests/cli_test.py
       - name: Rules engine test

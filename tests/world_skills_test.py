@@ -69,6 +69,87 @@ class WorldSkillsTests(unittest.IsolatedAsyncioTestCase):
         self.db.refresh(self.player)
         return copy.deepcopy((self.world.progress_json, self.player.private_state))
 
+    async def test_reading_default_and_old_save_do_not_advance_while_away(self):
+        before = self.snapshot()
+        with patch.object(runtime.world_harness, 'run', AsyncMock()) as model:
+            self.assertIsNone(await runtime.advance(self.db, self.world.id, now=10**11))
+            self.assertEqual(before, self.snapshot())
+            progress = copy.deepcopy(self.world.progress_json)
+            progress['stream'].pop('reading_mode')
+            progress['stream'].pop('read_requested')
+            self.world.progress_json = progress
+            self.db.commit()
+            before = self.snapshot()
+            self.assertIsNone(await runtime.advance(self.db, self.world.id, now=10**11))
+            self.assertEqual(before, self.snapshot())
+            model.assert_not_called()
+
+    async def test_one_read_request_one_passage_no_player_choice_or_repeat(self):
+        before = self.snapshot()[1]
+        revision = self.world.progress_json['narrative']['revision']
+        for _ in range(2):
+            self.assertEqual(stream.control(self.db, self.world, 'read', str(revision)), '')
+        async def model(session):
+            boot(session)
+            scene(session)
+            return session.finish({'prose': '许掌柜抖了抖袖口的雨水，望向檐下。'})
+        with patch.object(runtime.world_harness, 'run', side_effect=model) as ai:
+            self.assertTrue(await runtime.advance(self.db, self.world.id, now=10**11))
+            self.assertFalse(self.world.progress_json['stream']['read_requested'])
+            self.assertEqual(self.snapshot()[1], before)
+            self.assertEqual(self.db.query(PlayerAction).count(), 0)
+            # Reconnecting and clicking next consumes the pending paragraph, not a second permit.
+            channel = CLIChannel('reading-test', output=io.StringIO())
+            channel.user_id = 86213
+            await channel.submit('/read ' + str(revision + 1), GameFlow(channel))
+            self.db.expire_all()
+            self.assertIsNotNone(self.db.query(NarrativeBeat).first().delivered_at)
+            self.assertFalse(self.world.progress_json['stream']['read_requested'])
+            self.assertIn('许掌柜', channel.output.getvalue())
+            with dbmod.SessionLocal() as fresh:
+                self.assertIsNone(await runtime.advance(fresh, self.world.id, now=10**11 + 10000))
+            self.assertIn('已有新的段落', stream.control(self.db, self.world, 'read', str(revision)))
+            self.assertEqual(ai.call_count, 1)
+        progress = copy.deepcopy(self.world.progress_json)
+        progress['stream']['intervention'] = {'reason': '等待答复'}
+        self.world.progress_json = progress
+        self.db.commit()
+        self.assertIn('不会替你作答', stream.control(self.db, self.world, 'read'))
+        self.assertEqual(self.world.progress_json['stream']['intervention'], {'reason': '等待答复'})
+
+    async def test_leaving_reader_before_commit_discards_autonomous_candidate(self):
+        stream.control(self.db, self.world, 'read')
+        before = self.snapshot()
+        active = True
+        async def model(session):
+            nonlocal active
+            boot(session)
+            scene(session)
+            active = False
+            return session.finish({'prose': '许掌柜将药包往怀里拢了拢。'})
+        with patch.object(runtime.world_harness, 'run', side_effect=model):
+            self.assertIsNone(await runtime.advance(self.db, self.world.id, now=10**11, can_read=lambda: active))
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.db.query(NarrativeBeat).count(), 0)
+
+    async def test_web_reader_requires_fresh_visible_revision_and_disconnect_clears_it(self):
+        from app.web.channel import WebChannel
+        channel = WebChannel()
+        socket = object()
+        await channel.register('u:86213', socket)
+        self.assertFalse(channel.reading_ready(86213, 0))
+        channel.reader_update(socket, {'revision': 0, 'ready': True})
+        self.assertTrue(channel.reading_ready(86213, 0))
+        self.assertFalse(channel.reading_ready(86213, 1))
+        self.assertFalse(channel.reading_ready(123, 0))
+        channel.reader_update(socket, {'revision': 0, 'ready': False})
+        self.assertFalse(channel.reading_ready(86213, 0))
+        channel.reader_update(socket, {'revision': 0, 'ready': True})
+        with patch('app.web.channel.time.monotonic', return_value=10**11):
+            self.assertFalse(channel.reading_ready(86213, 0))
+        await channel.unregister('u:86213', socket)
+        self.assertFalse(channel.reading_ready(86213, 0))
+
     async def say(self, text, steps, prose='湿润的棉布贴着掌心，盆水沿布角滴落。', request_id=None):
         async def model(session):
             boot(session)
@@ -249,6 +330,7 @@ class WorldSkillsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.db.query(PlayerAction).count(), 0)
 
     async def test_autonomous_event_pause_pending_delivery_and_restart(self):
+        stream.control(self.db, self.world, 'read')
         async def model(s):
             boot(s)
             self.assertEqual(s.mode, 'world')
@@ -360,6 +442,7 @@ class WorldSkillsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state['memories'], [])
 
     async def test_pause_during_world_generation_is_not_overwritten(self):
+        stream.control(self.db, self.world, 'read')
         async def model(s):
             boot(s)
             scene(s, detail='日光落在庭院里。')
@@ -373,6 +456,7 @@ class WorldSkillsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.db.query(NarrativeBeat).count(), 0)
 
     async def test_arriving_player_interrupts_uncommitted_autonomous_generation(self):
+        stream.control(self.db, self.world, 'read')
         entered = asyncio.Event()
         cancelled = asyncio.Event()
         async def model(s):
